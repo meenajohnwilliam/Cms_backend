@@ -780,118 +780,71 @@ const adminRegister = async (req, res) => {
     // CREATE FREE SUBSCRIPTION
     // ------------------------------------------
 
-    const result =
-      await prisma.$transaction(
-        async (tx) => {
-          // ------------------------------------
-          // CREATE TENANT
-          // ------------------------------------
-
-          const tenant =
-            await tx.tenant.create({
-              data: {
-                name:
-                  normalizedCompanyName,
-
-                slug,
-              },
-            });
-
-          // ------------------------------------
-          // CREATE ADMIN
-          // ------------------------------------
-
-          const admin =
-            await tx.user.create({
-              data: {
-                name:
-                  normalizedName,
-
-                email:
-                  normalizedEmail,
-
-                password:
-                  hashedPassword,
-
-                role: "ADMIN",
-
-                tenantId:
-                  tenant.tenantId,
-
-                isEmailVerified:
-                  false,
-
-                emailVerificationOtp,
-
-                emailVerificationExpires,
-
-                emailVerificationOtpCreatedAt,
-              },
-            });
-
-          // ------------------------------------
-          // FIND FREE PLAN
-          // ------------------------------------
-
-          const freePlan =
-            await tx.plan.findUnique({
-              where: {
-                name: "Free",
-              },
-            });
-
-          if (!freePlan) {
-            throw new Error(
-              "Free plan not found. Please create the Free plan first."
-            );
-          }
-
-          // ------------------------------------
-          // SUBSCRIPTION DATES
-          // ------------------------------------
-
-          const startDate =
-            new Date();
-
-          const endDate =
-            new Date(startDate);
-
-          endDate.setMonth(
-            endDate.getMonth() + 1
-          );
-
-          // ------------------------------------
-          // CREATE FREE SUBSCRIPTION
-          // ------------------------------------
-
-          const subscription =
-            await tx.subscription.create({
-              data: {
-                tenantId:
-                  tenant.tenantId,
-
-                planId:
-                  freePlan.planId,
-
-                billingCycle:
-                  "MONTHLY",
-
-                status:
-                  "ACTIVE",
-
-                startDate,
-
-                endDate,
-              },
-            });
-
-          return {
-            tenant,
-            admin,
-            subscription,
-          };
-        }
+    const tenant = await prisma.tenant.create({
+        data: {
+          name: normalizedCompanyName,
+          slug,
+        },
+      });
+      
+      const admin = await prisma.user.create({
+        data: {
+          name: normalizedName,
+          email: normalizedEmail,
+          password: hashedPassword,
+          role: "ADMIN",
+      
+          tenant: {
+            connect: {
+              tenantId: tenant.tenantId,
+            },
+          },
+      
+          isEmailVerified: false,
+          emailVerificationOtp,
+          emailVerificationExpires,
+          emailVerificationOtpCreatedAt,
+        },
+      });
+      
+      const freePlan = await prisma.plan.findUnique({
+        where: {
+          name: "Free",
+        },
+      });
+      
+      if (!freePlan) {
+        return res.status(500).json({
+          success: false,
+          message:
+            "Free plan not found. Please create the Free plan first.",
+        });
+      }
+      
+      const startDate = new Date();
+      
+      const endDate = new Date(startDate);
+      endDate.setMonth(
+        endDate.getMonth() + 1
       );
+      
+      const subscription =
+        await prisma.subscription.create({
+          data: {
+            tenantId: tenant.tenantId,
+            planId: freePlan.planId,
+            billingCycle: "MONTHLY",
+            status: "ACTIVE",
+            startDate,
+            endDate,
+          },
+        });
+      
+      const result = {
+        tenant,
+        admin,
+        subscription,
+      };
 
     // ------------------------------------------
     // SEND OTP EMAIL
