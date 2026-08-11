@@ -1,6 +1,8 @@
 // controllers/plan.controller.js
 
 const prisma = require("../config/prisma");
+const { createRazorpayPlan } = require("../utils/services/razorpay.service");
+
 
 // ==========================================
 // CREATE PLAN
@@ -69,6 +71,57 @@ const createPlan = async (req, res) => {
       });
     }
 
+      // ==========================================
+    // 3. RAZORPAY PLAN IDS
+    // ==========================================
+
+    let razorpayMonthlyPlanId = null;
+    let razorpayYearlyPlanId = null;
+
+    // ==========================================
+    // 4. CREATE RAZORPAY MONTHLY PLAN
+    // ==========================================
+
+    if (Number(monthlyPrice) > 0) {
+      const monthlyPlan =
+        await createRazorpayPlan({
+          name: `${name.trim()} Monthly`,
+
+          amount:
+            monthlyPrice,
+
+          period: "monthly",
+
+          description:
+            `${name.trim()} monthly subscription`,
+        });
+
+      razorpayMonthlyPlanId =
+        monthlyPlan.id;
+    }
+
+    // ==========================================
+    // 5. CREATE RAZORPAY YEARLY PLAN
+    // ==========================================
+
+    if (Number(yearlyPrice) > 0) {
+      const yearlyPlan =
+        await createRazorpayPlan({
+          name: `${name.trim()} Yearly`,
+
+          amount:
+            yearlyPrice,
+
+          period: "yearly",
+
+          description:
+            `${name.trim()} yearly subscription`,
+        });
+
+      razorpayYearlyPlanId =
+        yearlyPlan.id;
+    }
+
     // ------------------------------------------
     // 3. CREATE PLAN
     // ------------------------------------------
@@ -86,6 +139,10 @@ const createPlan = async (req, res) => {
 
           projectLimit:
             Number(projectLimit),
+         
+            razorpayMonthlyPlanId,
+
+            razorpayYearlyPlanId,
 
           collectionLimit:
             Number(collectionLimit),
@@ -264,7 +321,10 @@ const updatePlan = async (req, res) => {
         where: {
           planId,
         },
-      });
+        include: {
+          subscriptions: true,
+        },
+              });
 
     if (!existingPlan) {
       return res.status(404).json({
@@ -273,33 +333,273 @@ const updatePlan = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // 2. CHECK DUPLICATE NAME
-    // ------------------------------------------
+    const hasSubscriptions =  existingPlan.subscriptions.length > 0;
 
-    if (name !== undefined) {
-      const duplicatePlan =
-        await prisma.plan.findFirst({
-          where: {
-            name: name.trim(),
-            NOT: {
-              planId,
-            },
+    const finalName =
+    name !== undefined
+      ? name.trim()
+      : existingPlan.name;
+
+  const finalMonthlyPrice =
+    monthlyPrice !== undefined
+      ? String(monthlyPrice)
+      : existingPlan.monthlyPrice;
+
+  const finalYearlyPrice =
+    yearlyPrice !== undefined
+      ? String(yearlyPrice)
+      : existingPlan.yearlyPrice;
+
+      if (hasSubscriptions) {
+        let newRazorpayMonthlyPlanId = null;
+        let newRazorpayYearlyPlanId = null;
+  
+        // ========================================
+        // NEW RAZORPAY MONTHLY PLAN
+        // ========================================
+  
+        if (Number(finalMonthlyPrice) > 0) {
+          const monthlyPlan =
+            await createRazorpayPlan({
+              name:
+                `${finalName} Monthly`,
+  
+              amount:
+                finalMonthlyPrice,
+  
+              period:
+                "monthly",
+  
+              description:
+                `${finalName} monthly subscription`,
+            });
+  
+          newRazorpayMonthlyPlanId =
+            monthlyPlan.id;
+        }
+  
+        // ========================================
+        // NEW RAZORPAY YEARLY PLAN
+        // ========================================
+  
+        if (Number(finalYearlyPrice) > 0) {
+          const yearlyPlan =
+            await createRazorpayPlan({
+              name:
+                `${finalName} Yearly`,
+  
+              amount:
+                finalYearlyPrice,
+  
+              period:
+                "yearly",
+  
+              description:
+                `${finalName} yearly subscription`,
+            });
+  
+          newRazorpayYearlyPlanId =
+            yearlyPlan.id;
+        }
+  // ========================================
+      // CREATE NEW DB PLAN
+      // ========================================
+
+      const newPlan =
+        await prisma.plan.create({
+          data: {
+            name:
+              finalName,
+
+            monthlyPrice:
+              finalMonthlyPrice,
+
+            yearlyPrice:
+              finalYearlyPrice,
+
+            razorpayMonthlyPlanId:
+              newRazorpayMonthlyPlanId,
+
+            razorpayYearlyPlanId:
+              newRazorpayYearlyPlanId,
+
+            projectLimit:
+              projectLimit !== undefined
+                ? Number(projectLimit)
+                : existingPlan.projectLimit,
+
+            collectionLimit:
+              collectionLimit !== undefined
+                ? Number(collectionLimit)
+                : existingPlan.collectionLimit,
+
+            apiKeyLimit:
+              apiKeyLimit !== undefined
+                ? Number(apiKeyLimit)
+                : existingPlan.apiKeyLimit,
+
+            teamMemberLimit:
+              teamMemberLimit !== undefined
+                ? Number(teamMemberLimit)
+                : existingPlan.teamMemberLimit,
+
+            storageLimit:
+              storageLimit !== undefined
+                ? Number(storageLimit)
+                : existingPlan.storageLimit,
+
+            getRequestsLimit:
+              getRequestsLimit !== undefined
+                ? Number(getRequestsLimit)
+                : existingPlan.getRequestsLimit,
+
+            writeRequestsLimit:
+              writeRequestsLimit !== undefined
+                ? Number(writeRequestsLimit)
+                : existingPlan.writeRequestsLimit,
+
+            customDomain:
+              customDomain !== undefined
+                ? Boolean(customDomain)
+                : existingPlan.customDomain,
+
+            mediaUpload:
+              mediaUpload !== undefined
+                ? Boolean(mediaUpload)
+                : existingPlan.mediaUpload,
+
+            analytics:
+              analytics !== undefined
+                ? analytics.trim()
+                : existingPlan.analytics,
+
+            emailSupport:
+              emailSupport !== undefined
+                ? emailSupport.trim()
+                : existingPlan.emailSupport,
+
+            displayOrder:
+              displayOrder !== undefined
+                ? Number(displayOrder)
+                : existingPlan.displayOrder,
+
+            isPopular:
+              isPopular !== undefined
+                ? Boolean(isPopular)
+                : existingPlan.isPopular,
+
+            isActive: true,
           },
         });
 
-      if (duplicatePlan) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Another plan already uses this name",
-        });
+      // ========================================
+      // DEACTIVATE OLD PLAN
+      // ========================================
+
+      await prisma.plan.update({
+        where: {
+          planId,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "New plan created and old plan deactivated",
+        plan: newPlan,
+      });
+    }
+
+    // ==========================================
+    // 6. PLAN HAS NO SUBSCRIPTIONS
+    // ==========================================
+    //
+    // We can update the existing DB row.
+    //
+    // BUT:
+    // If price changes, Razorpay Plan cannot
+    // be updated.
+    //
+    // Therefore create a NEW Razorpay Plan
+    // and save its new ID.
+    //
+
+    let razorpayMonthlyPlanId =
+      existingPlan.razorpayMonthlyPlanId;
+
+    let razorpayYearlyPlanId =
+      existingPlan.razorpayYearlyPlanId;
+
+    // ==========================================
+    // 7. MONTHLY PRICE CHANGED
+    // ==========================================
+
+    if (
+      monthlyPrice !== undefined &&
+      String(monthlyPrice) !==
+        existingPlan.monthlyPrice
+    ) {
+      if (Number(finalMonthlyPrice) > 0) {
+        const monthlyPlan =
+          await createRazorpayPlan({
+            name:
+              `${finalName} Monthly`,
+
+            amount:
+              finalMonthlyPrice,
+
+            period:
+              "monthly",
+
+            description:
+              `${finalName} monthly subscription`,
+          });
+
+        razorpayMonthlyPlanId =
+          monthlyPlan.id;
+      } else {
+        razorpayMonthlyPlanId = null;
       }
     }
 
-    // ------------------------------------------
-    // 3. UPDATE ONLY PROVIDED FIELDS
-    // ------------------------------------------
+    // ==========================================
+    // 8. YEARLY PRICE CHANGED
+    // ==========================================
+
+    if (
+      yearlyPrice !== undefined &&
+      String(yearlyPrice) !==
+        existingPlan.yearlyPrice
+    ) {
+      if (Number(finalYearlyPrice) > 0) {
+        const yearlyPlan =
+          await createRazorpayPlan({
+            name:
+              `${finalName} Yearly`,
+
+            amount:
+              finalYearlyPrice,
+
+            period:
+              "yearly",
+
+            description:
+              `${finalName} yearly subscription`,
+          });
+
+        razorpayYearlyPlanId =
+          yearlyPlan.id;
+      } else {
+        razorpayYearlyPlanId = null;
+      }
+    }
+
+    // ==========================================
+    // 9. UPDATE EXISTING DB PLAN
+    // ==========================================
 
     const plan =
       await prisma.plan.update({
@@ -309,7 +609,8 @@ const updatePlan = async (req, res) => {
 
         data: {
           ...(name !== undefined && {
-            name: name.trim(),
+            name:
+              name.trim(),
           }),
 
           ...(monthlyPrice !== undefined && {
@@ -321,6 +622,9 @@ const updatePlan = async (req, res) => {
             yearlyPrice:
               String(yearlyPrice),
           }),
+
+          razorpayMonthlyPlanId,
+          razorpayYearlyPlanId,
 
           ...(projectLimit !== undefined && {
             projectLimit:
@@ -396,7 +700,8 @@ const updatePlan = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Plan updated successfully",
+      message:
+        "Plan updated successfully",
       plan,
     });
   } catch (error) {
@@ -407,81 +712,117 @@ const updatePlan = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message:
+        "Internal server error",
     });
   }
-};
+}; 
+
+
 
 
 // ==========================================
 // DELETE PLAN
 // ==========================================
 
+// ==========================================
+// DELETE PLAN
+// ==========================================
+
 const deletePlan = async (req, res) => {
-  try {
-    const { planId } = req.params;
-
-    // ------------------------------------------
-    // 1. CHECK PLAN
-    // ------------------------------------------
-
-    const plan =
-      await prisma.plan.findUnique({
+    try {
+      const { planId } = req.params;
+  
+      // ==========================================
+      // 1. CHECK PLAN
+      // ==========================================
+  
+      const plan =
+        await prisma.plan.findUnique({
+          where: {
+            planId,
+          },
+          include: {
+            subscriptions: true,
+          },
+        });
+  
+      if (!plan) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Plan not found",
+        });
+      }
+  
+      // ==========================================
+      // 2. PLAN IS USED
+      // ==========================================
+      //
+      // DO NOT DELETE THE DB ROW.
+      //
+      // Existing subscriptions still point to
+      // this plan.
+      //
+      // Just deactivate it.
+      //
+  
+      if (
+        plan.subscriptions.length > 0
+      ) {
+        const deactivatedPlan =
+          await prisma.plan.update({
+            where: {
+              planId,
+            },
+            data: {
+              isActive: false,
+            },
+          });
+  
+        return res.status(200).json({
+          success: true,
+          message:
+            "Plan is already used. Plan has been deactivated.",
+          plan:
+            deactivatedPlan,
+        });
+      }
+  
+      // ==========================================
+      // 3. PLAN IS NOT USED
+      // ==========================================
+      //
+      // Delete only from YOUR database.
+      //
+      // Razorpay Plan cannot be deleted.
+      //
+  
+      await prisma.plan.delete({
         where: {
           planId,
         },
-        include: {
-          subscriptions: true,
-        },
       });
-
-    if (!plan) {
-      return res.status(404).json({
-        success: false,
-        message: "Plan not found",
+  
+      return res.status(200).json({
+        success: true,
+        message:
+          "Plan deleted successfully",
       });
-    }
-
-    // ------------------------------------------
-    // 2. DO NOT DELETE USED PLAN
-    // ------------------------------------------
-
-    if (
-      plan.subscriptions.length > 0
-    ) {
-      return res.status(400).json({
+    } catch (error) {
+      console.error(
+        "Delete Plan Error:",
+        error
+      );
+  
+      return res.status(500).json({
         success: false,
         message:
-          "This plan is already used by a subscription. Deactivate it instead.",
+          "Internal server error",
       });
     }
-
-    // ------------------------------------------
-    // 3. DELETE PLAN
-    // ------------------------------------------
-
-    await prisma.plan.delete({
-      where: {
-        planId,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Plan deleted successfully",
-    });
-  } catch (error) {
-    console.error(
-      "Delete Plan Error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-};
+  };
+  
 
 
 module.exports = {

@@ -3,8 +3,10 @@ const app = express()
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const superAdminRoutes = require("./src/routes/superAdmin.routes");
-const authRoutes = require("./src/routes/auth.routes")
+const authRoutes = require("./src/routes/auth.routes");
 const planRoutes = require("./src/routes/plan.routes");
+const subscriptionRoutes = require("./src/routes/subscription.routes");
+
 
 app.use(express.json())
 app.use(
@@ -22,6 +24,7 @@ app.use(cookieParser());
 app.use("/api/v1/super-admin", superAdminRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/plans", planRoutes);
+app.use("/api/v1/subscriptions", subscriptionRoutes);
 
 
 app.get("/api/v1/health", (req, res) => {
