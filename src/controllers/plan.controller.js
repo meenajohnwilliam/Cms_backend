@@ -58,16 +58,17 @@ const createPlan = async (req, res) => {
     // ------------------------------------------
 
     const existingPlan =
-      await prisma.plan.findUnique({
+      await prisma.plan.findFirst({
         where: {
           name: name.trim(),
+          isActive: true,
         },
       });
 
     if (existingPlan) {
       return res.status(409).json({
         success: false,
-        message: "Plan name already exists",
+        message: "Active plan name already exists",
       });
     }
 
@@ -332,6 +333,27 @@ const updatePlan = async (req, res) => {
         message: "Plan not found",
       });
     }
+
+     if (name !== undefined) {
+           const duplicatePlan =
+             await prisma.plan.findFirst({
+               where: {
+                 name: name.trim(),
+                 isActive: true,
+                 NOT: {
+                   planId,
+                 },
+               },
+             });
+        
+           if (duplicatePlan) {
+             return res.status(409).json({
+               success: false,
+               message:
+                 "Another active plan already uses this name",
+             });
+           }
+         }
 
     const hasSubscriptions =  existingPlan.subscriptions.length > 0;
 
