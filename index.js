@@ -11,7 +11,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/plans", planRoutes);
 
 
-app.get("/v1/cms/health", (req, res) => {
+app.get("/api/v1/health", (req, res) => {
     res.json({
         status: "OK",
         uptime: `${process.uptime()} seconds`,
