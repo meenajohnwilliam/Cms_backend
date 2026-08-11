@@ -237,9 +237,10 @@ const adminRegister = async (req, res) => {
         },
       });
       
-      const freePlan = await prisma.plan.findUnique({
+      const freePlan = await prisma.plan.findFirst({
         where: {
           name: "Free",
+          isActive: true,
         },
       });
       
@@ -250,7 +251,6 @@ const adminRegister = async (req, res) => {
             "Free plan not found. Please create the Free plan first.",
         });
       }
-      
 
       const startDate = new Date();
       
