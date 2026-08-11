@@ -1,5 +1,6 @@
 const express = require("express")
 const app = express()
+const cors = require("cors");
 const superAdminRoutes = require("./src/routes/superAdmin.routes");
 const authRoutes = require("./src/routes/auth.routes")
 const planRoutes = require("./src/routes/plan.routes");
