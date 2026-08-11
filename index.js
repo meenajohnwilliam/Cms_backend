@@ -1,0 +1,24 @@
+const express = require("express")
+const app = express()
+app.use(express.json())
+const superAdminRoutes = require("./src/routes/superAdmin.routes");
+const authRoutes = require("./src/routes/auth.routes")
+const planRoutes = require("./src/routes/plan.routes");
+
+
+app.use("/api/v1/super-admin", superAdminRoutes);
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/plans", planRoutes);
+
+
+app.get("/v1/cms/health", (req, res) => {
+    res.json({
+        status: "OK",
+        uptime: `${process.uptime()} seconds`,
+        timestamp: new Date()
+    });
+});
+
+app.listen(8003,()=>{
+    console.log("Server Started at port:8003")
+})
