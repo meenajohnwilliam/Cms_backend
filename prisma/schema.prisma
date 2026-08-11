@@ -61,6 +61,7 @@ model User {
 
   emailVerificationOtp      String?
   emailVerificationExpires  DateTime?
+  emailVerificationOtpCreatedAt DateTime?
 
   resetPasswordToken    String?  @unique
   resetPasswordExpires  DateTime?
