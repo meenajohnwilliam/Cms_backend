@@ -1,4 +1,5 @@
 const prisma = require("../config/prisma")
+const bcrypt = require("bcryptjs");
 
 
 exports.createSuperAdmin = async (req, res) => {
