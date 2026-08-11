@@ -16,12 +16,17 @@ exports.createSuperAdmin = async (req, res) => {
           message: "User already exists",
         });
       }
+
+      const hashedPassword = await bcrypt.hash(
+        password,
+        12
+      );
   
       const superAdmin = await prisma.user.create({
         data: {
           name,
           email,
-          password: password ,
+          password: hashedPassword ,
           role: "SUPER_ADMIN",
           tenantId: null,
           isEmailVerified: true,
