@@ -7,12 +7,7 @@ const config = require("../config/config");
 
 const getCurrentSubscription = async (req, res) => {
   try {
-    // const { tenantId } = req.user;
-
-    const tenantId = req.user?.tenantId;
-
-    console.log("req.user:", req.user);
-    console.log("tenantId:", tenantId);
+    const { tenantId } = req.params;
 
     if (!tenantId) {
       return res.status(403).json({
