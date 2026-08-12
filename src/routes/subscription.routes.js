@@ -5,6 +5,7 @@ const express = require("express");
 const {
   getCurrentSubscription,
   getAvailablePlans,
+  upgradeSubscription,
   razorpayWebhook
 } = require("../controllers/subscription.controller");
 
@@ -19,6 +20,13 @@ router.get(
 //   roleMiddleware("ADMIN"),
   getCurrentSubscription
 );
+
+router.post(
+    "/upgrade",
+    // authMiddleware,
+    // roleMiddleware("ADMIN"),
+    upgradeSubscription
+  );
 
 
 router.post(
