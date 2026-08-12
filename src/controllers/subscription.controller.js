@@ -3,6 +3,8 @@
 const prisma = require("../config/prisma");
 const crypto = require("crypto");
 const config = require("../config/config");
+const { razorpay } = require("../utils/services/razorpay.service");
+
 
 
 const getCurrentSubscription = async (req, res) => {
@@ -568,8 +570,342 @@ const razorpayWebhook = async (req, res) => {
     }
   };
 
+
+
+
+const upgradeSubscription = async (req, res) => {
+  try {
+    const {
+      planId,
+      billingCycle,
+      tenantId
+    } = req.body;
+
+  
+
+    // ------------------------------------------
+    // 1. VALIDATION
+    // ------------------------------------------
+
+    if (!tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        message: "planId is required",
+      });
+    }
+
+    if (
+      !billingCycle ||
+      !["MONTHLY", "YEARLY"].includes(
+        billingCycle
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "billingCycle must be MONTHLY or YEARLY",
+      });
+    }
+
+    // ------------------------------------------
+    // 2. GET CURRENT SUBSCRIPTION
+    // ------------------------------------------
+
+    const currentSubscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: "ACTIVE",
+        },
+        include: {
+          plan: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!currentSubscription) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Active subscription not found",
+      });
+    }
+
+    // ------------------------------------------
+    // 3. GET NEW PLAN
+    // ------------------------------------------
+
+    const newPlan =
+      await prisma.plan.findUnique({
+        where: {
+          planId,
+        },
+      });
+
+    if (!newPlan) {
+      return res.status(404).json({
+        success: false,
+        message: "Plan not found",
+      });
+    }
+
+    if (!newPlan.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Plan is inactive",
+      });
+    }
+
+    // ------------------------------------------
+    // 4. PREVENT SAME PLAN
+    // ------------------------------------------
+
+    if (
+      currentSubscription.planId ===
+        newPlan.planId &&
+      currentSubscription.billingCycle ===
+        billingCycle
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You are already using this plan",
+      });
+    }
+
+    // ------------------------------------------
+    // 5. GET PRICES
+    // ------------------------------------------
+
+    const currentPrice =
+      currentSubscription.billingCycle ===
+      "MONTHLY"
+        ? Number(
+            currentSubscription.plan
+              .monthlyPrice
+          )
+        : Number(
+            currentSubscription.plan
+              .yearlyPrice
+          );
+
+    const newPrice =
+      billingCycle === "MONTHLY"
+        ? Number(newPlan.monthlyPrice)
+        : Number(newPlan.yearlyPrice);
+
+    // ------------------------------------------
+    // 6. CHECK UPGRADE
+    // ------------------------------------------
+
+    if (newPrice <= currentPrice) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This is not an upgrade. Downgrade requires Super Admin approval.",
+      });
+    }
+
+    // ------------------------------------------
+    // 7. CALCULATE DIFFERENCE
+    // ------------------------------------------
+
+    const upgradeAmount =
+      Number(
+        (
+          newPrice -
+          currentPrice
+        ).toFixed(2)
+      );
+
+    if (upgradeAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid upgrade amount",
+      });
+    }
+
+    // ------------------------------------------
+    // 8. GET RAZORPAY PLAN ID
+    // ------------------------------------------
+
+    const razorpayPlanId =
+      billingCycle === "MONTHLY"
+        ? newPlan.razorpayMonthlyPlanId
+        : newPlan.razorpayYearlyPlanId;
+
+    if (!razorpayPlanId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Razorpay plan is not configured",
+      });
+    }
+
+    // ------------------------------------------
+    // 9. CREATE RAZORPAY SUBSCRIPTION
+    // ------------------------------------------
+
+    const razorpaySubscription =
+      await razorpay.subscriptions.create({
+        plan_id:
+          razorpayPlanId,
+
+        quantity: 1,
+
+        customer_notify: 1,
+
+        total_count:
+          billingCycle === "MONTHLY"
+            ? 120
+            : 10,
+
+        notes: {
+          tenantId,
+
+          oldPlanId:
+            currentSubscription.planId,
+
+          newPlanId:
+            newPlan.planId,
+
+          billingCycle,
+
+          currentPrice:
+            String(currentPrice),
+
+          newPrice:
+            String(newPrice),
+
+          upgradeAmount:
+            String(upgradeAmount),
+        },
+      });
+
+    // ------------------------------------------
+    // 10. CREATE PAYMENT RECORD
+    // ------------------------------------------
+
+    const payment =
+      await prisma.payment.create({
+        data: {
+          tenantId,
+
+          subscriptionId:
+            currentSubscription
+              .subscriptionId,
+
+          amount:
+            String(upgradeAmount),
+
+          currency: "INR",
+
+          status: "PENDING",
+
+          razorpaySubscriptionId:
+            razorpaySubscription.id,
+        },
+      });
+
+    // ------------------------------------------
+    // 11. RESPONSE
+    // ------------------------------------------
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        "Upgrade subscription created successfully",
+
+      currentPlan: {
+        planId:
+          currentSubscription.planId,
+
+        name:
+          currentSubscription.plan.name,
+
+        billingCycle:
+          currentSubscription
+            .billingCycle,
+
+        price:
+          currentPrice,
+      },
+
+      newPlan: {
+        planId:
+          newPlan.planId,
+
+        name:
+          newPlan.name,
+
+        billingCycle,
+
+        price:
+          newPrice,
+      },
+
+      upgrade: {
+        currentPrice,
+
+        newPrice,
+
+        amountToPay:
+          upgradeAmount,
+      },
+
+      razorpay: {
+        keyId:
+          config.razorpay.keyId,
+
+        subscriptionId:
+          razorpaySubscription.id,
+
+        planId:
+          razorpayPlanId,
+      },
+
+      payment: {
+        paymentId:
+          payment.paymentId,
+
+        amount:
+          upgradeAmount,
+
+        currency: "INR",
+
+        status: "PENDING",
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Upgrade Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Internal server error",
+    });
+  }
+};
+
+
+
 module.exports = {
   getCurrentSubscription,
   getAvailablePlans,
-  razorpayWebhook
+  razorpayWebhook,
+  upgradeSubscription,
 };
