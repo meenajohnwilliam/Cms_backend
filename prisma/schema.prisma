@@ -168,8 +168,7 @@ model Payment {
 
   razorpayPaymentId  String?       @unique
   razorpayOrderId    String?       @unique
-  razorpaySignature  String?
-
+  razorpaySubscriptionId String?      
   paidAt             DateTime?
 
   createdAt          DateTime      @default(now())

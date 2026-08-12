@@ -743,7 +743,7 @@ const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message:
-          "Invalid email or password",
+          "Account does not exist",
       });
     }
 
