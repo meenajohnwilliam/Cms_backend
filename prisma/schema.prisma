@@ -90,6 +90,7 @@ model Plan {
 
   razorpayMonthlyPlanId  String?  @unique
   razorpayYearlyPlanId   String?  @unique
+  razorpaySubscriptionId String?      
 
   projectLimit        Int
   collectionLimit     Int
