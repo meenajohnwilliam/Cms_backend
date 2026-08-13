@@ -6,7 +6,6 @@ const {
   getCurrentSubscription,
   getAvailablePlans,
   upgradeSubscription,
-  razorpayWebhook
 } = require("../controllers/subscription.controller");
 
 // const authMiddleware = require("../middleware/auth.middleware");
@@ -29,15 +28,15 @@ router.post(
   );
 
 
-router.post(
-    "/razorpay/webhook",
+// router.post(
+//     "/razorpay/webhook",
   
-    express.raw({
-      type: "application/json",
-    }),
+//     express.raw({
+//       type: "application/json",
+//     }),
   
-    razorpayWebhook
-  );
+//     razorpayWebhook
+//   );
 
 router.get(
   "/plans",

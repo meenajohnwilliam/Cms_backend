@@ -6,6 +6,7 @@ const superAdminRoutes = require("./src/routes/superAdmin.routes");
 const authRoutes = require("./src/routes/auth.routes");
 const planRoutes = require("./src/routes/plan.routes");
 const subscriptionRoutes = require("./src/routes/subscription.routes");
+const {razorpayWebhook} = require("./src/controllers/subscription.controller") 
 
 
 app.use(
@@ -18,6 +19,16 @@ app.use(
   })
 );
 
+app.post("/api/v1/subscriptions/razorpay/webhook",
+    express.raw({
+      type: "application/json",
+    }),
+    razorpayWebhook
+  );
+
+
+app.use(express.json());
+
 
 app.use(cookieParser());
 app.use("/api/v1/super-admin", superAdminRoutes);
@@ -25,8 +36,6 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/plans", planRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
 
-
-app.use(express.json());
 
 
 
