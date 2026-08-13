@@ -27,6 +27,7 @@ enum SubscriptionStatus {
   SUSPENDED
   CANCELLED
   EXPIRED
+  PENDING
 }
 
 

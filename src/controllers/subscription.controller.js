@@ -722,8 +722,7 @@ const upgradeSubscription = async (req, res) => {
     // 2. GET CURRENT SUBSCRIPTION
     // ------------------------------------------
 
-    const currentSubscription =
-      await prisma.subscription.findFirst({
+    const currentSubscription = await prisma.subscription.findFirst({
         where: {
           tenantId,
           status: "ACTIVE",
@@ -748,8 +747,7 @@ const upgradeSubscription = async (req, res) => {
     // 3. GET NEW PLAN
     // ------------------------------------------
 
-    const newPlan =
-      await prisma.plan.findUnique({
+    const newPlan = await prisma.plan.findUnique({
         where: {
           planId,
         },
@@ -773,12 +771,7 @@ const upgradeSubscription = async (req, res) => {
     // 4. PREVENT SAME PLAN
     // ------------------------------------------
 
-    if (
-      currentSubscription.planId ===
-        newPlan.planId &&
-      currentSubscription.billingCycle ===
-        billingCycle
-    ) {
+    if ( currentSubscription.planId === newPlan.planId && currentSubscription.billingCycle === billingCycle ) {
       return res.status(400).json({
         success: false,
         message:
@@ -790,22 +783,10 @@ const upgradeSubscription = async (req, res) => {
     // 5. GET PRICES
     // ------------------------------------------
 
-    const currentPrice =
-      currentSubscription.billingCycle ===
-      "MONTHLY"
-        ? Number(
-            currentSubscription.plan
-              .monthlyPrice
-          )
-        : Number(
-            currentSubscription.plan
-              .yearlyPrice
-          );
+    const currentPrice = currentSubscription.billingCycle === "MONTHLY" ? Number( currentSubscription.plan.monthlyPrice)
+        : Number(currentSubscription.plan.yearlyPrice );
 
-    const newPrice =
-      billingCycle === "MONTHLY"
-        ? Number(newPlan.monthlyPrice)
-        : Number(newPlan.yearlyPrice);
+    const newPrice = billingCycle === "MONTHLY"? Number(newPlan.monthlyPrice) : Number(newPlan.yearlyPrice);
 
     // ------------------------------------------
     // 6. CHECK UPGRADE
@@ -823,13 +804,7 @@ const upgradeSubscription = async (req, res) => {
     // 7. CALCULATE DIFFERENCE
     // ------------------------------------------
 
-    const upgradeAmount =
-      Number(
-        (
-          newPrice -
-          currentPrice
-        ).toFixed(2)
-      );
+    const upgradeAmount = Number((newPrice - currentPrice).toFixed(2));
 
     if (upgradeAmount <= 0) {
       return res.status(400).json({
@@ -860,39 +835,19 @@ const upgradeSubscription = async (req, res) => {
     // 9. CREATE RAZORPAY SUBSCRIPTION
     // ------------------------------------------
 
-    const razorpaySubscription =
-      await razorpay.subscriptions.create({
-        plan_id:
-          razorpayPlanId,
-
+    const razorpaySubscription = await razorpay.subscriptions.create({
+        plan_id: razorpayPlanId,
         quantity: 1,
-
         customer_notify: 1,
-
-        total_count:
-          billingCycle === "MONTHLY"
-            ? 120
-            : 10,
-
+        total_count: billingCycle === "MONTHLY" ? 120 : 10,
         notes: {
           tenantId,
-
-          oldPlanId:
-            currentSubscription.planId,
-
-          newPlanId:
-            newPlan.planId,
-
+          oldPlanId: currentSubscription.planId,
+          newPlanId: newPlan.planId,
           billingCycle,
-
-          currentPrice:
-            String(currentPrice),
-
-          newPrice:
-            String(newPrice),
-
-          upgradeAmount:
-            String(upgradeAmount),
+          currentPrice: String(currentPrice),
+          newPrice: String(newPrice),
+          upgradeAmount: String(upgradeAmount),
         },
       });
 
@@ -902,38 +857,22 @@ const upgradeSubscription = async (req, res) => {
 // CREATE NEW SUBSCRIPTION AS PENDING
 // ============================================================
 
-const pendingSubscription =
-await prisma.subscription.create({
+const pendingSubscription = await prisma.subscription.create({
   data: {
     tenantId,
-
     // ⭐ New plan
     planId: newPlan.planId,
-
     // ⭐ New billing cycle
     billingCycle,
-
     // ⭐ IMPORTANT
     // Do NOT make it ACTIVE yet
     status: "PENDING",
-
     startDate: new Date(),
 
-    endDate:
-      billingCycle === "MONTHLY"
-        ? new Date(
-            new Date().setMonth(
-              new Date().getMonth() + 1
-            )
-          )
-        : new Date(
-            new Date().setFullYear(
-              new Date().getFullYear() + 1
-            )
-          ),
-
-    razorpaySubscriptionId:
-      razorpaySubscription.id,
+    endDate: billingCycle === "MONTHLY" ? new Date( new Date().setMonth( new Date().getMonth() + 1 ) )
+     : new Date( new Date().setFullYear(  new Date().getFullYear() + 1 ) ),
+    
+     razorpaySubscriptionId: razorpaySubscription.id,
   },
 });
 
@@ -941,23 +880,15 @@ await prisma.subscription.create({
     // 10. CREATE PAYMENT RECORD
     // ------------------------------------------
 
-    const payment =
-      await prisma.payment.create({
+    const payment = await prisma.payment.create({
         data: {
           tenantId,
-
           subscriptionId:
           pendingSubscription.subscriptionId,
-
-          amount:
-            String(upgradeAmount),
-
+          amount: String(upgradeAmount),
           currency: "INR",
-
           status: "PENDING",
-
-          razorpaySubscriptionId:
-            razorpaySubscription.id,
+          razorpaySubscriptionId: razorpaySubscription.id,
         },
       });
 
@@ -968,66 +899,38 @@ await prisma.subscription.create({
     return res.status(201).json({
       success: true,
 
-      message:
-        "Upgrade subscription created successfully",
+      message:"Upgrade subscription created successfully",
 
       currentPlan: {
-        planId:
-          currentSubscription.planId,
-
-        name:
-          currentSubscription.plan.name,
-
-        billingCycle:
-          currentSubscription
-            .billingCycle,
-
-        price:
-          currentPrice,
+        planId: currentSubscription.planId,
+        name: currentSubscription.plan.name,
+        billingCycle: currentSubscription.billingCycle,
+        price: currentPrice,
       },
 
       newPlan: {
-        planId:
-          newPlan.planId,
-
-        name:
-          newPlan.name,
-
+        planId: newPlan.planId,
+        name: newPlan.name,
         billingCycle,
-
-        price:
-          newPrice,
+        price: newPrice,
       },
 
       upgrade: {
         currentPrice,
-
         newPrice,
-
-        amountToPay:
-          upgradeAmount,
+        amountToPay: upgradeAmount,
       },
 
       razorpay: {
-        keyId:
-          config.razorpay.keyId,
-
-        subscriptionId:
-          razorpaySubscription.id,
-
-        planId:
-          razorpayPlanId,
+        keyId: config.razorpay.keyId,
+        subscriptionId: razorpaySubscription.id,
+        planId: razorpayPlanId,
       },
 
       payment: {
-        paymentId:
-          payment.paymentId,
-
-        amount:
-          upgradeAmount,
-
+        paymentId: payment.paymentId,
+        amount: upgradeAmount,
         currency: "INR",
-
         status: "PENDING",
       },
     });
