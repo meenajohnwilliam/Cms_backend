@@ -8,7 +8,6 @@ const planRoutes = require("./src/routes/plan.routes");
 const subscriptionRoutes = require("./src/routes/subscription.routes");
 
 
-app.use(express.json())
 app.use(
   cors({
     origin: [
@@ -19,12 +18,18 @@ app.use(
   })
 );
 
+
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/v1/super-admin", superAdminRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/plans", planRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
+
+
+app.use(express.json());
+
+
 
 
 app.get("/api/v1/health", (req, res) => {

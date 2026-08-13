@@ -675,901 +675,901 @@ const getAvailablePlans = async (req, res) => {
 
 
 const razorpayWebhook = async (req, res) => {
-    try {
-      console.log("==========================================");
-      console.log("RAZORPAY WEBHOOK STARTED");
-      console.log("==========================================");
-  
-      console.log("[1] Request headers:", req.headers);
-  
-      const signature =
-        req.headers["x-razorpay-signature"];
-  
-      console.log("[2] Razorpay signature:", signature);
-  
-      if (!signature) {
-        console.log("[3] Signature missing");
-  
-        return res.status(400).json({
-          success: false,
-          message: "Razorpay signature missing",
-        });
-      }
-  
-      console.log("[4] Checking raw body");
-  
-      if (!Buffer.isBuffer(req.body)) {
+  try {
+    console.log("==========================================");
+    console.log("RAZORPAY WEBHOOK STARTED");
+    console.log("==========================================");
+
+    console.log("[1] Request headers:", req.headers);
+
+    const signature =
+      req.headers["x-razorpay-signature"];
+
+    console.log("[2] Razorpay signature:", signature);
+
+    if (!signature) {
+      console.log("[3] Signature missing");
+
+      return res.status(400).json({
+        success: false,
+        message: "Razorpay signature missing",
+      });
+    }
+
+    console.log("[4] Checking raw body");
+
+    if (!Buffer.isBuffer(req.body)) {
+      console.log(
+        "[5] Request body is NOT a Buffer"
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Raw webhook body is required",
+      });
+    }
+
+    console.log(
+      "[6] Raw body received successfully"
+    );
+
+    // ==========================================
+    // VERIFY WEBHOOK SIGNATURE
+    // ==========================================
+
+    console.log(
+      "[7] Creating HMAC SHA256 signature"
+    );
+
+    const expectedSignature =
+      crypto
+        .createHmac(
+          "sha256",
+          config.razorpay.webhookSecret
+        )
+        .update(req.body)
+        .digest("hex");
+
+    console.log(
+      "[8] Expected signature:",
+      expectedSignature
+    );
+
+    const receivedSignature =
+      Buffer.from(signature, "utf8");
+
+    console.log(
+      "[9] Received signature buffer created"
+    );
+
+    const expectedSignatureBuffer =
+      Buffer.from(
+        expectedSignature,
+        "utf8"
+      );
+
+    console.log(
+      "[10] Expected signature buffer created"
+    );
+
+    console.log(
+      "[11] Received signature length:",
+      receivedSignature.length
+    );
+
+    console.log(
+      "[12] Expected signature length:",
+      expectedSignatureBuffer.length
+    );
+
+    if (
+      receivedSignature.length !==
+      expectedSignatureBuffer.length
+    ) {
+      console.log(
+        "[13] Signature lengths do not match"
+      );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid Razorpay webhook signature",
+      });
+    }
+
+    console.log(
+      "[14] Signature lengths match"
+    );
+
+    const isValid =
+      crypto.timingSafeEqual(
+        receivedSignature,
+        expectedSignatureBuffer
+      );
+
+    console.log(
+      "[15] Signature valid:",
+      isValid
+    );
+
+    if (!isValid) {
+      console.log(
+        "[16] Invalid Razorpay webhook signature"
+      );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid Razorpay webhook signature",
+      });
+    }
+
+    console.log(
+      "[17] Razorpay webhook signature VERIFIED"
+    );
+
+    // ==========================================
+    // PARSE RAW BODY
+    // ==========================================
+
+    console.log(
+      "[18] Parsing webhook body"
+    );
+
+    const payload =
+      JSON.parse(
+        req.body.toString("utf8")
+      );
+
+    console.log(
+      "[19] Webhook payload:",
+      JSON.stringify(payload, null, 2)
+    );
+
+    const event =
+      payload.event;
+
+    console.log(
+      "[20] Razorpay event:",
+      event
+    );
+
+    const subscriptionEntity =
+      payload.payload
+        ?.subscription
+        ?.entity;
+
+    console.log(
+      "[21] Subscription entity:",
+      subscriptionEntity
+    );
+
+    const paymentEntity =
+      payload.payload
+        ?.payment
+        ?.entity;
+
+    console.log(
+      "[22] Payment entity:",
+      paymentEntity
+    );
+
+    const razorpaySubscriptionId =
+      subscriptionEntity?.id;
+
+    console.log(
+      "[23] Razorpay Subscription ID:",
+      razorpaySubscriptionId
+    );
+
+    // ==========================================
+    // SUBSCRIPTION AUTHENTICATED
+    // ==========================================
+
+    if (
+      event ===
+      "subscription.authenticated"
+    ) {
+      console.log(
+        "[24] Event: subscription.authenticated"
+      );
+
+      if (!razorpaySubscriptionId) {
         console.log(
-          "[5] Request body is NOT a Buffer"
+          "[25] Razorpay Subscription ID missing"
         );
-  
-        return res.status(400).json({
-          success: false,
-          message: "Raw webhook body is required",
+
+        return res.status(200).json({
+          success: true,
+          message: "Webhook received",
         });
       }
-  
+
       console.log(
-        "[6] Raw body received successfully"
-      );
-  
-      // ==========================================
-      // VERIFY WEBHOOK SIGNATURE
-      // ==========================================
-  
-      console.log(
-        "[7] Creating HMAC SHA256 signature"
-      );
-  
-      const expectedSignature =
-        crypto
-          .createHmac(
-            "sha256",
-            config.razorpay.webhookSecret
-          )
-          .update(req.body)
-          .digest("hex");
-  
-      console.log(
-        "[8] Expected signature:",
-        expectedSignature
-      );
-  
-      const receivedSignature =
-        Buffer.from(signature, "utf8");
-  
-      console.log(
-        "[9] Received signature buffer created"
-      );
-  
-      const expectedSignatureBuffer =
-        Buffer.from(
-          expectedSignature,
-          "utf8"
-        );
-  
-      console.log(
-        "[10] Expected signature buffer created"
-      );
-  
-      console.log(
-        "[11] Received signature length:",
-        receivedSignature.length
-      );
-  
-      console.log(
-        "[12] Expected signature length:",
-        expectedSignatureBuffer.length
-      );
-  
-      if (
-        receivedSignature.length !==
-        expectedSignatureBuffer.length
-      ) {
-        console.log(
-          "[13] Signature lengths do not match"
-        );
-  
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid Razorpay webhook signature",
-        });
-      }
-  
-      console.log(
-        "[14] Signature lengths match"
-      );
-  
-      const isValid =
-        crypto.timingSafeEqual(
-          receivedSignature,
-          expectedSignatureBuffer
-        );
-  
-      console.log(
-        "[15] Signature valid:",
-        isValid
-      );
-  
-      if (!isValid) {
-        console.log(
-          "[16] Invalid Razorpay webhook signature"
-        );
-  
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid Razorpay webhook signature",
-        });
-      }
-  
-      console.log(
-        "[17] Razorpay webhook signature VERIFIED"
-      );
-  
-      // ==========================================
-      // PARSE RAW BODY
-      // ==========================================
-  
-      console.log(
-        "[18] Parsing webhook body"
-      );
-  
-      const payload =
-        JSON.parse(
-          req.body.toString("utf8")
-        );
-  
-      console.log(
-        "[19] Webhook payload:",
-        JSON.stringify(payload, null, 2)
-      );
-  
-      const event =
-        payload.event;
-  
-      console.log(
-        "[20] Razorpay event:",
-        event
-      );
-  
-      const subscriptionEntity =
-        payload.payload
-          ?.subscription
-          ?.entity;
-  
-      console.log(
-        "[21] Subscription entity:",
-        subscriptionEntity
-      );
-  
-      const paymentEntity =
-        payload.payload
-          ?.payment
-          ?.entity;
-  
-      console.log(
-        "[22] Payment entity:",
-        paymentEntity
-      );
-  
-      const razorpaySubscriptionId =
-        subscriptionEntity?.id;
-  
-      console.log(
-        "[23] Razorpay Subscription ID:",
+        "[26] Finding subscription:",
         razorpaySubscriptionId
       );
-  
-      // ==========================================
-      // SUBSCRIPTION AUTHENTICATED
-      // ==========================================
-  
-      if (
-        event ===
-        "subscription.authenticated"
-      ) {
-        console.log(
-          "[24] Event: subscription.authenticated"
-        );
-  
-        if (!razorpaySubscriptionId) {
-          console.log(
-            "[25] Razorpay Subscription ID missing"
-          );
-  
-          return res.status(200).json({
-            success: true,
-            message: "Webhook received",
-          });
-        }
-  
-        console.log(
-          "[26] Finding subscription:",
-          razorpaySubscriptionId
-        );
-  
-        const subscription =
-          await prisma.subscription.findUnique({
-            where: {
-              razorpaySubscriptionId,
-            },
-          });
-  
-        console.log(
-          "[27] Subscription found:",
-          subscription
-        );
-  
-        if (subscription) {
-          console.log(
-            "[28] Updating subscription to ACTIVE"
-          );
-  
-          await prisma.subscription.update({
-            where: {
-              subscriptionId:
-                subscription.subscriptionId,
-            },
-  
-            data: {
-              status: "ACTIVE",
-            },
-          });
-  
-          console.log(
-            "[29] Subscription activated successfully"
-          );
-        } else {
-          console.log(
-            "[30] Subscription not found"
-          );
-        }
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION ACTIVATED
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.activated"
-      ) {
-        console.log(
-          "[31] Event: subscription.activated"
-        );
-  
-        if (!razorpaySubscriptionId) {
-          console.log(
-            "[32] Razorpay Subscription ID missing"
-          );
-  
-          return res.status(200).json({
-            success: true,
-            message: "Webhook received",
-          });
-        }
-  
-        console.log(
-          "[33] Finding NEW subscription:",
-          razorpaySubscriptionId
-        );
-  
-        const newSubscription =
-          await prisma.subscription.findUnique({
-            where: {
-              razorpaySubscriptionId,
-            },
-          });
-  
-        console.log(
-          "[34] New subscription:",
-          newSubscription
-        );
-  
-        if (!newSubscription) {
-          console.log(
-            "[35] New subscription not found"
-          );
-  
-          return res.status(200).json({
-            success: true,
-            message:
-              "Subscription not found",
-          });
-        }
-  
-        // ========================================
-        // FIND OLD ACTIVE SUBSCRIPTION
-        // ========================================
-  
-        console.log(
-          "[36] Finding OLD active subscription"
-        );
-  
-        const oldSubscription =
-          await prisma.subscription.findFirst({
-            where: {
-              tenantId:
-                newSubscription.tenantId,
-  
-              status: "ACTIVE",
-  
-              NOT: {
-                subscriptionId:
-                  newSubscription.subscriptionId,
-              },
-            },
-  
-            orderBy: {
-              createdAt: "desc",
-            },
-          });
-  
-        console.log(
-          "[37] Old subscription:",
-          oldSubscription
-        );
-  
-        // ========================================
-        // CANCEL OLD PLAN
-        // ========================================
-  
-        if (oldSubscription) {
-          console.log(
-            "[38] Old subscription found"
-          );
-  
-          console.log(
-            "[39] Cancelling old subscription:",
-            oldSubscription.subscriptionId
-          );
-  
-          await prisma.subscription.update({
-            where: {
-              subscriptionId:
-                oldSubscription.subscriptionId,
-            },
-  
-            data: {
-              status: "CANCELLED",
-            },
-          });
-  
-          console.log(
-            "[40] Old subscription cancelled"
-          );
-        } else {
-          console.log(
-            "[41] No old active subscription found"
-          );
-        }
-  
-        // ========================================
-        // ACTIVATE NEW PLAN
-        // ========================================
-  
-        console.log(
-          "[42] Activating new subscription"
-        );
-  
-        await prisma.subscription.update({
+
+      const subscription =
+        await prisma.subscription.findUnique({
           where: {
-            subscriptionId:
-              newSubscription.subscriptionId,
-          },
-  
-          data: {
-            status: "ACTIVE",
-  
-            startDate: new Date(),
+            razorpaySubscriptionId,
           },
         });
-  
+
+      console.log(
+        "[27] Subscription found:",
+        subscription
+      );
+
+      if (subscription) {
         console.log(
-          "[43] New subscription activated"
+          "[28] Updating subscription to ACTIVE"
         );
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION CHARGED
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.charged"
-      ) {
-        console.log(
-          "[44] Event: subscription.charged"
-        );
-  
-        if (!razorpaySubscriptionId) {
-          console.log(
-            "[45] Razorpay Subscription ID missing"
-          );
-  
-          return res.status(200).json({
-            success: true,
-            message: "Webhook received",
-          });
-        }
-  
-        console.log(
-          "[46] Finding subscription:",
-          razorpaySubscriptionId
-        );
-  
-        const subscription =
-          await prisma.subscription.findUnique({
-            where: {
-              razorpaySubscriptionId,
-            },
-          });
-  
-        console.log(
-          "[47] Subscription:",
-          subscription
-        );
-  
-        if (!subscription) {
-          console.log(
-            "[48] Subscription not found"
-          );
-  
-          return res.status(200).json({
-            success: true,
-            message:
-              "Subscription not found",
-          });
-        }
-  
-        // ========================================
-        // CALCULATE DATES
-        // ========================================
-  
-        console.log(
-          "[49] Calculating subscription dates"
-        );
-  
-        const startDate =
-          new Date();
-  
-        console.log(
-          "[50] Start date:",
-          startDate
-        );
-  
-        const endDate =
-          new Date(startDate);
-  
-        if (
-          subscription.billingCycle ===
-          "MONTHLY"
-        ) {
-          console.log(
-            "[51] Billing cycle: MONTHLY"
-          );
-  
-          endDate.setMonth(
-            endDate.getMonth() + 1
-          );
-        } else {
-          console.log(
-            "[52] Billing cycle: YEARLY"
-          );
-  
-          endDate.setFullYear(
-            endDate.getFullYear() + 1
-          );
-        }
-  
-        console.log(
-          "[53] End date:",
-          endDate
-        );
-  
-        // ========================================
-        // UPDATE SUBSCRIPTION
-        // ========================================
-  
-        console.log(
-          "[54] Updating subscription"
-        );
-  
+
         await prisma.subscription.update({
           where: {
             subscriptionId:
               subscription.subscriptionId,
           },
-  
+
           data: {
             status: "ACTIVE",
-  
-            startDate,
-  
-            endDate,
           },
         });
-  
+
         console.log(
-          "[55] Subscription updated successfully"
+          "[29] Subscription activated successfully"
         );
-  
-        // ========================================
-        // MARK PAYMENT SUCCESS
-        // ========================================
-  
+      } else {
         console.log(
-          "[56] Checking payment entity"
+          "[30] Subscription not found"
         );
-  
-        if (paymentEntity?.id) {
+      }
+    }
+
+    // ==========================================
+    // SUBSCRIPTION ACTIVATED
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.activated"
+    ) {
+      console.log(
+        "[31] Event: subscription.activated"
+      );
+
+      if (!razorpaySubscriptionId) {
+        console.log(
+          "[32] Razorpay Subscription ID missing"
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: "Webhook received",
+        });
+      }
+
+      console.log(
+        "[33] Finding NEW subscription:",
+        razorpaySubscriptionId
+      );
+
+      const newSubscription =
+        await prisma.subscription.findUnique({
+          where: {
+            razorpaySubscriptionId,
+          },
+        });
+
+      console.log(
+        "[34] New subscription:",
+        newSubscription
+      );
+
+      if (!newSubscription) {
+        console.log(
+          "[35] New subscription not found"
+        );
+
+        return res.status(200).json({
+          success: true,
+          message:
+            "Subscription not found",
+        });
+      }
+
+      // ========================================
+      // FIND OLD ACTIVE SUBSCRIPTION
+      // ========================================
+
+      console.log(
+        "[36] Finding OLD active subscription"
+      );
+
+      const oldSubscription =
+        await prisma.subscription.findFirst({
+          where: {
+            tenantId:
+              newSubscription.tenantId,
+
+            status: "ACTIVE",
+
+            NOT: {
+              subscriptionId:
+                newSubscription.subscriptionId,
+            },
+          },
+
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+
+      console.log(
+        "[37] Old subscription:",
+        oldSubscription
+      );
+
+      // ========================================
+      // CANCEL OLD PLAN
+      // ========================================
+
+      if (oldSubscription) {
+        console.log(
+          "[38] Old subscription found"
+        );
+
+        console.log(
+          "[39] Cancelling old subscription:",
+          oldSubscription.subscriptionId
+        );
+
+        await prisma.subscription.update({
+          where: {
+            subscriptionId:
+              oldSubscription.subscriptionId,
+          },
+
+          data: {
+            status: "CANCELLED",
+          },
+        });
+
+        console.log(
+          "[40] Old subscription cancelled"
+        );
+      } else {
+        console.log(
+          "[41] No old active subscription found"
+        );
+      }
+
+      // ========================================
+      // ACTIVATE NEW PLAN
+      // ========================================
+
+      console.log(
+        "[42] Activating new subscription"
+      );
+
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            newSubscription.subscriptionId,
+        },
+
+        data: {
+          status: "ACTIVE",
+
+          startDate: new Date(),
+        },
+      });
+
+      console.log(
+        "[43] New subscription activated"
+      );
+    }
+
+    // ==========================================
+    // SUBSCRIPTION CHARGED
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.charged"
+    ) {
+      console.log(
+        "[44] Event: subscription.charged"
+      );
+
+      if (!razorpaySubscriptionId) {
+        console.log(
+          "[45] Razorpay Subscription ID missing"
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: "Webhook received",
+        });
+      }
+
+      console.log(
+        "[46] Finding subscription:",
+        razorpaySubscriptionId
+      );
+
+      const subscription =
+        await prisma.subscription.findUnique({
+          where: {
+            razorpaySubscriptionId,
+          },
+        });
+
+      console.log(
+        "[47] Subscription:",
+        subscription
+      );
+
+      if (!subscription) {
+        console.log(
+          "[48] Subscription not found"
+        );
+
+        return res.status(200).json({
+          success: true,
+          message:
+            "Subscription not found",
+        });
+      }
+
+      // ========================================
+      // CALCULATE DATES
+      // ========================================
+
+      console.log(
+        "[49] Calculating subscription dates"
+      );
+
+      const startDate =
+        new Date();
+
+      console.log(
+        "[50] Start date:",
+        startDate
+      );
+
+      const endDate =
+        new Date(startDate);
+
+      if (
+        subscription.billingCycle ===
+        "MONTHLY"
+      ) {
+        console.log(
+          "[51] Billing cycle: MONTHLY"
+        );
+
+        endDate.setMonth(
+          endDate.getMonth() + 1
+        );
+      } else {
+        console.log(
+          "[52] Billing cycle: YEARLY"
+        );
+
+        endDate.setFullYear(
+          endDate.getFullYear() + 1
+        );
+      }
+
+      console.log(
+        "[53] End date:",
+        endDate
+      );
+
+      // ========================================
+      // UPDATE SUBSCRIPTION
+      // ========================================
+
+      console.log(
+        "[54] Updating subscription"
+      );
+
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            subscription.subscriptionId,
+        },
+
+        data: {
+          status: "ACTIVE",
+
+          startDate,
+
+          endDate,
+        },
+      });
+
+      console.log(
+        "[55] Subscription updated successfully"
+      );
+
+      // ========================================
+      // MARK PAYMENT SUCCESS
+      // ========================================
+
+      console.log(
+        "[56] Checking payment entity"
+      );
+
+      if (paymentEntity?.id) {
+        console.log(
+          "[57] Payment ID:",
+          paymentEntity.id
+        );
+
+        console.log(
+          "[58] Finding existing payment"
+        );
+
+        const existingPayment =
+          await prisma.payment.findUnique({
+            where: {
+              razorpayPaymentId:
+                paymentEntity.id,
+            },
+          });
+
+        console.log(
+          "[59] Existing payment:",
+          existingPayment
+        );
+
+        if (existingPayment) {
           console.log(
-            "[57] Payment ID:",
-            paymentEntity.id
+            "[60] Updating existing payment"
           );
-  
+
+          await prisma.payment.update({
+            where: {
+              paymentId:
+                existingPayment.paymentId,
+            },
+
+            data: {
+              status: "SUCCESS",
+
+              paidAt:
+                new Date(),
+
+              razorpaySubscriptionId,
+            },
+          });
+
           console.log(
-            "[58] Finding existing payment"
+            "[61] Payment marked SUCCESS"
           );
-  
-          const existingPayment =
-            await prisma.payment.findUnique({
-              where: {
-                razorpayPaymentId:
-                  paymentEntity.id,
-              },
-            });
-  
-          console.log(
-            "[59] Existing payment:",
-            existingPayment
-          );
-  
-          if (existingPayment) {
-            console.log(
-              "[60] Updating existing payment"
-            );
-  
-            await prisma.payment.update({
-              where: {
-                paymentId:
-                  existingPayment.paymentId,
-              },
-  
-              data: {
-                status: "SUCCESS",
-  
-                paidAt:
-                  new Date(),
-  
-                razorpaySubscriptionId,
-              },
-            });
-  
-            console.log(
-              "[61] Payment marked SUCCESS"
-            );
-          } else {
-            console.log(
-              "[62] Payment does not exist"
-            );
-  
-            console.log(
-              "[63] Creating new payment"
-            );
-  
-            await prisma.payment.create({
-              data: {
-                tenantId:
-                  subscription.tenantId,
-  
-                subscriptionId:
-                  subscription.subscriptionId,
-  
-                amount:
-                  String(
-                    paymentEntity.amount / 100
-                  ),
-  
-                currency:
-                  paymentEntity.currency ||
-                  "INR",
-  
-                status: "SUCCESS",
-  
-                razorpayPaymentId:
-                  paymentEntity.id,
-  
-                razorpaySubscriptionId,
-  
-                paidAt:
-                  new Date(),
-              },
-            });
-  
-            console.log(
-              "[64] Payment created successfully"
-            );
-          }
         } else {
           console.log(
-            "[65] Payment entity not found"
+            "[62] Payment does not exist"
+          );
+
+          console.log(
+            "[63] Creating new payment"
+          );
+
+          await prisma.payment.create({
+            data: {
+              tenantId:
+                subscription.tenantId,
+
+              subscriptionId:
+                subscription.subscriptionId,
+
+              amount:
+                String(
+                  paymentEntity.amount / 100
+                ),
+
+              currency:
+                paymentEntity.currency ||
+                "INR",
+
+              status: "SUCCESS",
+
+              razorpayPaymentId:
+                paymentEntity.id,
+
+              razorpaySubscriptionId,
+
+              paidAt:
+                new Date(),
+            },
+          });
+
+          console.log(
+            "[64] Payment created successfully"
           );
         }
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION PENDING
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.pending"
-      ) {
+      } else {
         console.log(
-          "[66] Event: subscription.pending"
-        );
-  
-        if (razorpaySubscriptionId) {
-          console.log(
-            "[67] Finding pending subscription"
-          );
-  
-          const subscription =
-            await prisma.subscription.findUnique({
-              where: {
-                razorpaySubscriptionId,
-              },
-            });
-  
-          console.log(
-            "[68] Subscription:",
-            subscription
-          );
-  
-          if (subscription) {
-            console.log(
-              "[69] Setting subscription to PAST_DUE"
-            );
-  
-            await prisma.subscription.update({
-              where: {
-                subscriptionId:
-                  subscription.subscriptionId,
-              },
-  
-              data: {
-                status:
-                  "PAST_DUE",
-              },
-            });
-  
-            console.log(
-              "[70] Subscription set to PAST_DUE"
-            );
-          }
-        }
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION HALTED
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.halted"
-      ) {
-        console.log(
-          "[71] Event: subscription.halted"
-        );
-  
-        if (razorpaySubscriptionId) {
-          console.log(
-            "[72] Finding halted subscription"
-          );
-  
-          const subscription =
-            await prisma.subscription.findUnique({
-              where: {
-                razorpaySubscriptionId,
-              },
-            });
-  
-          console.log(
-            "[73] Subscription:",
-            subscription
-          );
-  
-          if (subscription) {
-            console.log(
-              "[74] Setting subscription to SUSPENDED"
-            );
-  
-            await prisma.subscription.update({
-              where: {
-                subscriptionId:
-                  subscription.subscriptionId,
-              },
-  
-              data: {
-                status:
-                  "SUSPENDED",
-              },
-            });
-  
-            console.log(
-              "[75] Subscription suspended"
-            );
-          }
-        }
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION CANCELLED
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.cancelled"
-      ) {
-        console.log(
-          "[76] Event: subscription.cancelled"
-        );
-  
-        if (razorpaySubscriptionId) {
-          console.log(
-            "[77] Finding cancelled subscription"
-          );
-  
-          const subscription =
-            await prisma.subscription.findUnique({
-              where: {
-                razorpaySubscriptionId,
-              },
-            });
-  
-          console.log(
-            "[78] Subscription:",
-            subscription
-          );
-  
-          if (subscription) {
-            console.log(
-              "[79] Setting subscription to CANCELLED"
-            );
-  
-            await prisma.subscription.update({
-              where: {
-                subscriptionId:
-                  subscription.subscriptionId,
-              },
-  
-              data: {
-                status:
-                  "CANCELLED",
-              },
-            });
-  
-            console.log(
-              "[80] Subscription cancelled"
-            );
-          }
-        }
-      }
-  
-      // ==========================================
-      // SUBSCRIPTION COMPLETED
-      // ==========================================
-  
-      else if (
-        event ===
-        "subscription.completed"
-      ) {
-        console.log(
-          "[81] Event: subscription.completed"
-        );
-  
-        if (razorpaySubscriptionId) {
-          console.log(
-            "[82] Finding completed subscription"
-          );
-  
-          const subscription =
-            await prisma.subscription.findUnique({
-              where: {
-                razorpaySubscriptionId,
-              },
-            });
-  
-          console.log(
-            "[83] Subscription:",
-            subscription
-          );
-  
-          if (subscription) {
-            console.log(
-              "[84] Setting subscription to EXPIRED"
-            );
-  
-            await prisma.subscription.update({
-              where: {
-                subscriptionId:
-                  subscription.subscriptionId,
-              },
-  
-              data: {
-                status:
-                  "EXPIRED",
-              },
-            });
-  
-            console.log(
-              "[85] Subscription expired"
-            );
-          }
-        }
-      }
-  
-      // ==========================================
-      // UNKNOWN EVENT
-      // ==========================================
-  
-      else {
-        console.log(
-          "[86] Unknown Razorpay event:",
-          event
+          "[65] Payment entity not found"
         );
       }
-  
-      // ==========================================
-      // SUCCESS RESPONSE
-      // ==========================================
-  
-      console.log(
-        "[87] Webhook processing completed"
-      );
-  
-      console.log(
-        "=========================================="
-      );
-  
-      return res.status(200).json({
-        success: true,
-        message:
-          "Webhook processed successfully",
-      });
-    } catch (error) {
-      console.error(
-        "=========================================="
-      );
-  
-      console.error(
-        "RAZORPAY WEBHOOK ERROR"
-      );
-  
-      console.error(
-        "=========================================="
-      );
-  
-      console.error(
-        "Error message:",
-        error.message
-      );
-  
-      console.error(
-        "Error stack:",
-        error.stack
-      );
-  
-      return res.status(500).json({
-        success: false,
-        message:
-          "Webhook processing failed",
-      });
     }
-  };
+
+    // ==========================================
+    // SUBSCRIPTION PENDING
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.pending"
+    ) {
+      console.log(
+        "[66] Event: subscription.pending"
+      );
+
+      if (razorpaySubscriptionId) {
+        console.log(
+          "[67] Finding pending subscription"
+        );
+
+        const subscription =
+          await prisma.subscription.findUnique({
+            where: {
+              razorpaySubscriptionId,
+            },
+          });
+
+        console.log(
+          "[68] Subscription:",
+          subscription
+        );
+
+        if (subscription) {
+          console.log(
+            "[69] Setting subscription to PAST_DUE"
+          );
+
+          await prisma.subscription.update({
+            where: {
+              subscriptionId:
+                subscription.subscriptionId,
+            },
+
+            data: {
+              status:
+                "PAST_DUE",
+            },
+          });
+
+          console.log(
+            "[70] Subscription set to PAST_DUE"
+          );
+        }
+      }
+    }
+
+    // ==========================================
+    // SUBSCRIPTION HALTED
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.halted"
+    ) {
+      console.log(
+        "[71] Event: subscription.halted"
+      );
+
+      if (razorpaySubscriptionId) {
+        console.log(
+          "[72] Finding halted subscription"
+        );
+
+        const subscription =
+          await prisma.subscription.findUnique({
+            where: {
+              razorpaySubscriptionId,
+            },
+          });
+
+        console.log(
+          "[73] Subscription:",
+          subscription
+        );
+
+        if (subscription) {
+          console.log(
+            "[74] Setting subscription to SUSPENDED"
+          );
+
+          await prisma.subscription.update({
+            where: {
+              subscriptionId:
+                subscription.subscriptionId,
+            },
+
+            data: {
+              status:
+                "SUSPENDED",
+            },
+          });
+
+          console.log(
+            "[75] Subscription suspended"
+          );
+        }
+      }
+    }
+
+    // ==========================================
+    // SUBSCRIPTION CANCELLED
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.cancelled"
+    ) {
+      console.log(
+        "[76] Event: subscription.cancelled"
+      );
+
+      if (razorpaySubscriptionId) {
+        console.log(
+          "[77] Finding cancelled subscription"
+        );
+
+        const subscription =
+          await prisma.subscription.findUnique({
+            where: {
+              razorpaySubscriptionId,
+            },
+          });
+
+        console.log(
+          "[78] Subscription:",
+          subscription
+        );
+
+        if (subscription) {
+          console.log(
+            "[79] Setting subscription to CANCELLED"
+          );
+
+          await prisma.subscription.update({
+            where: {
+              subscriptionId:
+                subscription.subscriptionId,
+            },
+
+            data: {
+              status:
+                "CANCELLED",
+            },
+          });
+
+          console.log(
+            "[80] Subscription cancelled"
+          );
+        }
+      }
+    }
+
+    // ==========================================
+    // SUBSCRIPTION COMPLETED
+    // ==========================================
+
+    else if (
+      event ===
+      "subscription.completed"
+    ) {
+      console.log(
+        "[81] Event: subscription.completed"
+      );
+
+      if (razorpaySubscriptionId) {
+        console.log(
+          "[82] Finding completed subscription"
+        );
+
+        const subscription =
+          await prisma.subscription.findUnique({
+            where: {
+              razorpaySubscriptionId,
+            },
+          });
+
+        console.log(
+          "[83] Subscription:",
+          subscription
+        );
+
+        if (subscription) {
+          console.log(
+            "[84] Setting subscription to EXPIRED"
+          );
+
+          await prisma.subscription.update({
+            where: {
+              subscriptionId:
+                subscription.subscriptionId,
+            },
+
+            data: {
+              status:
+                "EXPIRED",
+            },
+          });
+
+          console.log(
+            "[85] Subscription expired"
+          );
+        }
+      }
+    }
+
+    // ==========================================
+    // UNKNOWN EVENT
+    // ==========================================
+
+    else {
+      console.log(
+        "[86] Unknown Razorpay event:",
+        event
+      );
+    }
+
+    // ==========================================
+    // SUCCESS RESPONSE
+    // ==========================================
+
+    console.log(
+      "[87] Webhook processing completed"
+    );
+
+    console.log(
+      "=========================================="
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Webhook processed successfully",
+    });
+  } catch (error) {
+    console.error(
+      "=========================================="
+    );
+
+    console.error(
+      "RAZORPAY WEBHOOK ERROR"
+    );
+
+    console.error(
+      "=========================================="
+    );
+
+    console.error(
+      "Error message:",
+      error.message
+    );
+
+    console.error(
+      "Error stack:",
+      error.stack
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Webhook processing failed",
+    });
+  }
+};
 
 
 
