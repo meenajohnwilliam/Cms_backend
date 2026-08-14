@@ -17,7 +17,7 @@ const generateSlug = (name) => {
 const createCollection = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { name, description ,tenantId} = req.body;
+    const { name ,tenantId} = req.body;
   
 
     if (!tenantId) {
@@ -147,8 +147,7 @@ const createCollection = async (req, res) => {
           projectId,
           name: name.trim(),
           slug,
-          description:
-            description?.trim() || null,
+          
           status: "DRAFT",
         },
       });
@@ -306,7 +305,7 @@ const getCollection = async (req, res) => {
 const updateCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { name, description,tenantId } = req.body;
+    const { name,tenantId } = req.body;
  
 
     if (
@@ -391,10 +390,7 @@ const updateCollection = async (req, res) => {
             slug,
           }),
 
-          ...(description !== undefined && {
-            description:
-              description.trim() || null,
-          }),
+       
         },
       });
 
