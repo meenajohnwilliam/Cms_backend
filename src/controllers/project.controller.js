@@ -16,8 +16,8 @@ const generateSlug = (name) => {
 
 const createProject = async (req, res) => {
   try {
-    const { name, description } = req.body;
-    const  tenantId  = req.body;
+    const { name, description,tenantId } = req.body;
+    
 
     if (!tenantId) {
       return res.status(403).json({
@@ -226,8 +226,8 @@ const getProject = async (req, res) => {
 const updateProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { name, description } = req.body;
-    const  tenantId  = req.body;
+    const { name, description ,tenantId} = req.body;
+  
 
     const project =
       await prisma.project.findFirst({
