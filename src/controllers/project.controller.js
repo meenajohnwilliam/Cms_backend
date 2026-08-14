@@ -17,7 +17,7 @@ const generateSlug = (name) => {
 const createProject = async (req, res) => {
   try {
     const { name, description } = req.body;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     if (!tenantId) {
       return res.status(403).json({
@@ -126,7 +126,7 @@ const createProject = async (req, res) => {
 
 const getProjects = async (req, res) => {
   try {
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const projects =
       await prisma.project.findMany({
@@ -171,7 +171,7 @@ const getProjects = async (req, res) => {
 const getProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const project =
       await prisma.project.findFirst({
@@ -227,7 +227,7 @@ const updateProject = async (req, res) => {
   try {
     const { projectId } = req.params;
     const { name, description } = req.body;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const project =
       await prisma.project.findFirst({
@@ -329,7 +329,7 @@ const updateProject = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const project =
       await prisma.project.findFirst({

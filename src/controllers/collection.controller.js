@@ -17,8 +17,8 @@ const generateSlug = (name) => {
 const createCollection = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { name, description } = req.body;
-    const { tenantId } = req.user;
+    const { name, description ,tenantId} = req.body;
+  
 
     if (!tenantId) {
       return res.status(403).json({
@@ -178,7 +178,7 @@ const createCollection = async (req, res) => {
 const getCollections = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     // ========================================================
     // CHECK PROJECT
@@ -250,7 +250,7 @@ const getCollections = async (req, res) => {
 const getCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const collection =
       await prisma.collection.findFirst({
@@ -306,8 +306,8 @@ const getCollection = async (req, res) => {
 const updateCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { name, description } = req.body;
-    const { tenantId } = req.user;
+    const { name, description,tenantId } = req.body;
+ 
 
     if (
       name !== undefined &&
@@ -424,7 +424,7 @@ const updateCollection = async (req, res) => {
 const deleteCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const collection =
       await prisma.collection.findFirst({
@@ -478,7 +478,7 @@ const publishCollection = async (
 ) => {
   try {
     const { collectionId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const collection =
       await prisma.collection.findFirst({
@@ -548,7 +548,7 @@ const unpublishCollection = async (
 ) => {
   try {
     const { collectionId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const collection =
       await prisma.collection.findFirst({

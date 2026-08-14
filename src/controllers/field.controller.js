@@ -34,9 +34,10 @@ const createField = async (req, res) => {
       type,
       isRequired = false,
       displayOrder = 0,
+      tenantId
     } = req.body;
 
-    const { tenantId } = req.user;
+
 
     if (!tenantId) {
       return res.status(403).json({
@@ -147,7 +148,7 @@ const createField = async (req, res) => {
 const getFields = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const collection =
       await prisma.collection.findFirst({
@@ -202,7 +203,7 @@ const getFields = async (req, res) => {
 const getField = async (req, res) => {
   try {
     const { fieldId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const field =
       await prisma.collectionField.findFirst({
@@ -254,9 +255,9 @@ const updateField = async (req, res) => {
       type,
       isRequired,
       displayOrder,
+      tenantId
     } = req.body;
 
-    const { tenantId } = req.user;
 
     const field =
       await prisma.collectionField.findFirst({
@@ -375,7 +376,7 @@ const updateField = async (req, res) => {
 const deleteField = async (req, res) => {
   try {
     const { fieldId } = req.params;
-    const { tenantId } = req.user;
+    const { tenantId } = req.body;
 
     const field =
       await prisma.collectionField.findFirst({
