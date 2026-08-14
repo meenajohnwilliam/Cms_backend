@@ -7,7 +7,9 @@ const authRoutes = require("./src/routes/auth.routes");
 const planRoutes = require("./src/routes/plan.routes");
 const subscriptionRoutes = require("./src/routes/subscription.routes");
 const {razorpayWebhook} = require("./src/controllers/subscription.controller") 
-
+const projectRoutes = require("./src/routes/project.routes");
+const collectionRoutes = require("./src/routes/collection.routes");
+const fieldRoutes = require("./src/routes/field.routes");
 
 app.use(
   cors({
@@ -35,8 +37,9 @@ app.use("/api/v1/super-admin", superAdminRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/plans", planRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
-
-
+app.use("/api/v1/projects", projectRoutes);
+app.use("/api/v1/collections",collectionRoutes);
+app.use("/api/v1/fields",fieldRoutes);
 
 
 
