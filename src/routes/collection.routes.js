@@ -25,7 +25,7 @@ const router = express.Router();
 // ============================================================
 
 router.post(
-  "/collections/projects/:projectId",
+  "/projects/:projectId",
 //   authMiddleware,
 //   roleMiddleware("ADMIN"),
   createCollection
