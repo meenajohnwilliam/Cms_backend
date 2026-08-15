@@ -13,11 +13,11 @@ const {
   getUserProjects,
 } = require("../controllers/clientUser.controller");
 
-// const authMiddleware =
-//   require("../middleware/auth.middleware");
+const authMiddleware =
+  require("../middleware/auth.middleware");
 
-// const roleMiddleware =
-//   require("../middleware/role.middleware");
+const roleMiddleware =
+  require("../middleware/role.middleware");
 
 const router = express.Router();
 
@@ -27,36 +27,36 @@ const router = express.Router();
 
 router.post(
   "/users",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   createClientUser
 );
 
 router.get(
   "/users",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getClientUsers
 );
 
 router.get(
   "/users/:userId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getClientUser
 );
 
 router.put(
   "/users/:userId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   updateClientUser
 );
 
 router.delete(
   "/users/:userId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   deleteClientUser
 );
 
@@ -66,22 +66,22 @@ router.delete(
 
 router.post(
   "/users/:userId/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   assignProjectToUser
 );
 
 router.delete(
   "/users/:userId/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   removeProjectAccess
 );
 
 router.get(
   "/users/:userId/projects",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getUserProjects
 );
 
