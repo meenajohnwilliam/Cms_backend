@@ -19,6 +19,8 @@ const authMiddleware =
 const roleMiddleware =
   require("../middleware/role.middleware");
 
+  const  clientRecordAccess = require("../middleware/clientRecordAccess.middleware")
+
 const router = express.Router();
 
 // ============================================================
@@ -28,35 +30,40 @@ const router = express.Router();
 router.post(
   "/users",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   createClientUser
 );
 
 router.get(
   "/users",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   getClientUsers
 );
 
 router.get(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   getClientUser
 );
 
 router.put(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   updateClientUser
 );
 
 router.delete(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   deleteClientUser
 );
 
@@ -67,21 +74,24 @@ router.delete(
 router.post(
   "/users/:userId/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   assignProjectToUser
 );
 
 router.delete(
   "/users/:userId/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   removeProjectAccess
 );
 
 router.get(
   "/users/:userId/projects",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN", "USER"),
+  clientRecordAccess,
   getUserProjects
 );
 
