@@ -10,6 +10,11 @@ const {razorpayWebhook} = require("./src/controllers/subscription.controller")
 const projectRoutes = require("./src/routes/project.routes");
 const collectionRoutes = require("./src/routes/collection.routes");
 const fieldRoutes = require("./src/routes/field.routes");
+const recordRoutes = require("./src/routes/record.routes");
+const apiKeyRoutes = require("./src/routes/apiKey.routes");
+const publicApiRoutes = require("./src/routes/publicApi.routes");
+const clientUserRoutes = require("./src/routes/clientUser.routes");
+
 
 app.use(
   cors({
@@ -40,6 +45,15 @@ app.use("/api/v1/subscriptions", subscriptionRoutes);
 app.use("/api/v1/projects", projectRoutes);
 app.use("/api/v1/collections",collectionRoutes);
 app.use("/api/v1/fields",fieldRoutes);
+app.use("/api/v1/records",recordRoutes);
+app.use("/api/v1/api-keys",apiKeyRoutes);
+app.use("/api/v1/public",publicApiRoutes);
+app.use("/api/v1/admin",clientUserRoutes);
+
+
+
+
+
 
 
 
