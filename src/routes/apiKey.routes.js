@@ -11,11 +11,11 @@ const {
   deleteApiKey,
 } = require("../controllers/apiKey.controller");
 
-// const authMiddleware =
-//   require("../middleware/auth.middleware");
+const authMiddleware =
+  require("../middleware/auth.middleware");
 
-// const roleMiddleware =
-//   require("../middleware/role.middleware");
+const roleMiddleware =
+  require("../middleware/role.middleware");
 
 const router = express.Router();
 
@@ -25,8 +25,8 @@ const router = express.Router();
 
 router.post(
   "/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   createApiKey
 );
 
@@ -36,8 +36,8 @@ router.post(
 
 router.get(
   "/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getApiKeys
 );
 
@@ -47,8 +47,8 @@ router.get(
 
 router.get(
   "/:apiKeyId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getApiKey
 );
 
@@ -58,8 +58,8 @@ router.get(
 
 router.put(
   "/:apiKeyId/revoke",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   revokeApiKey
 );
 
@@ -69,8 +69,8 @@ router.put(
 
 router.put(
   "/:apiKeyId/activate",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   activateApiKey
 );
 
@@ -80,8 +80,8 @@ router.put(
 
 router.delete(
   "/:apiKeyId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   deleteApiKey
 );
 
