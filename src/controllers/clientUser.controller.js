@@ -756,6 +756,76 @@ const getUserProjects = async (req, res) => {
   }
 };
 
+
+
+// only for user alone
+// ============================================================
+// GET MY ASSIGNED PROJECTS
+// ============================================================
+
+const getMyProjects = async (req, res) => {
+  try {
+    const { userId, tenantId, role } = req.user;
+
+    if (role !== "USER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only client users can access this API",
+      });
+    }
+
+    const projects = await prisma.userProjectAccess.findMany({
+      where: {
+        userId,
+        isActive: true,
+
+        project: {
+          tenantId,
+          isActive: true,
+        },
+      },
+
+      select: {
+        accessId: true,
+
+        project: {
+          select: {
+            projectId: true,
+            name: true,
+            slug: true,
+            description: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: projects.length,
+
+      projects: projects.map((item) => ({
+        accessId: item.accessId,
+        ...item.project,
+      })),
+    });
+  } catch (error) {
+    console.error("Get My Projects Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+
 module.exports = {
   createClientUser,
   getClientUsers,
@@ -765,4 +835,5 @@ module.exports = {
   assignProjectToUser,
   removeProjectAccess,
   getUserProjects,
+  getMyProjects,
 };

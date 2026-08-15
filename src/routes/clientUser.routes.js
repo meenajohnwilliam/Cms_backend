@@ -11,6 +11,7 @@ const {
   assignProjectToUser,
   removeProjectAccess,
   getUserProjects,
+  getMyProjects
 } = require("../controllers/clientUser.controller");
 
 const authMiddleware =
@@ -30,7 +31,7 @@ const router = express.Router();
 router.post(
   "/users",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   createClientUser
 );
@@ -38,7 +39,7 @@ router.post(
 router.get(
   "/users",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   getClientUsers
 );
@@ -46,7 +47,7 @@ router.get(
 router.get(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   getClientUser
 );
@@ -54,7 +55,7 @@ router.get(
 router.put(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   updateClientUser
 );
@@ -62,7 +63,7 @@ router.put(
 router.delete(
   "/users/:userId",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   deleteClientUser
 );
@@ -74,7 +75,7 @@ router.delete(
 router.post(
   "/users/:userId/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   assignProjectToUser
 );
@@ -82,7 +83,7 @@ router.post(
 router.delete(
   "/users/:userId/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   removeProjectAccess
 );
@@ -90,9 +91,17 @@ router.delete(
 router.get(
   "/users/:userId/projects",
   authMiddleware,
-  roleMiddleware("ADMIN", "USER"),
+  roleMiddleware("ADMIN"),
   clientRecordAccess,
   getUserProjects
 );
+
+
+router.get(
+  "assigned/user/projects",
+    authMiddleware,
+    roleMiddleware("USER"),
+    getMyProjects
+  );
 
 module.exports = router;
