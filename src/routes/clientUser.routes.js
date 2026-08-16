@@ -97,7 +97,7 @@ router.get(
 
 
 router.get(
-  "assigned/user/projects",
+  "/assigned/user/projects",
     authMiddleware,
     roleMiddleware("USER"),
     clientRecordAccess,
