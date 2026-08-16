@@ -100,7 +100,6 @@ router.get(
   "/assigned/user/projects",
     authMiddleware,
     roleMiddleware("USER"),
-    clientRecordAccess,
     getMyProjects
   );
 
