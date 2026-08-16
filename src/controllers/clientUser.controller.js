@@ -585,10 +585,7 @@ const assignProjectToUser = async (req, res) => {
 // REMOVE PROJECT ACCESS
 // ============================================================
 
-const removeProjectAccess = async (
-  req,
-  res
-) => {
+const removeProjectAccess = async (req, res) => {
   try {
     const { userId, projectId } = req.params;
     const { tenantId, role } = req.user;

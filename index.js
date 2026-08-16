@@ -14,6 +14,9 @@ const recordRoutes = require("./src/routes/record.routes");
 const apiKeyRoutes = require("./src/routes/apiKey.routes");
 const publicApiRoutes = require("./src/routes/publicApi.routes");
 const clientUserRoutes = require("./src/routes/clientUser.routes");
+const formRoutes = require("./src/routes/form.routes");
+const formFieldRoutes = require("./src/routes/formField.routes");
+const formSubmissionRoutes = require("./src/routes/formSubmission.routes");
 
 
 app.use(
@@ -49,6 +52,12 @@ app.use("/api/v1/records",recordRoutes);
 app.use("/api/v1/api-keys",apiKeyRoutes);
 app.use("/api/v1/public",publicApiRoutes);
 app.use("/api/v1/admin",clientUserRoutes);
+app.use("/api/v1/forms",formRoutes);
+app.use("/api/v1/fields",formFieldRoutes);
+app.use("/api/v1/forms/submissions",formSubmissionRoutes);
+
+
+
 
 
 
