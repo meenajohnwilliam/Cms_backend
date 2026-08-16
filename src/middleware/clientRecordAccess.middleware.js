@@ -38,39 +38,69 @@ const clientRecordAccess = async (req, res, next) => {
 
     if (req.params.collectionId) {
 
-      const collection =
+        const collection =
         await prisma.collection.findFirst({
           where: {
             collectionId:
               req.params.collectionId,
-
+      
             project: {
               tenantId,
-              isActive: true,
-
-              userAccess: {
-                some: {
-                  userId,
-                  isActive: true,
-                },
-              },
             },
           },
-
+      
           select: {
             collectionId: true,
             projectId: true,
+      
+            project: {
+              select: {
+                projectId: true,
+                isActive: true,
+              },
+            },
           },
         });
-
-
+      
+      
+      // PROJECT NOT FOUND
       if (!collection) {
-        return res.status(403).json({
+        return res.status(404).json({
           success: false,
-          message:
-            "You do not have access to this collection",
+          message: "No project found",
         });
       }
+      
+      
+      // PROJECT DELETED / INACTIVE
+      if (!collection.project.isActive) {
+        return res.status(404).json({
+          success: false,
+          message: "No project found",
+        });
+      }
+      
+      
+      // CHECK USER ACCESS
+      const access =
+        await prisma.userProjectAccess.findUnique({
+          where: {
+            userId_projectId: {
+              userId,
+              projectId: collection.projectId,
+            },
+          },
+        });
+      
+      
+      if (!access || !access.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
+
+
 
 
       req.projectId =
