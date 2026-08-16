@@ -330,7 +330,7 @@ const updateProject = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const  {tenantId}  = req.user;
+    const  {tenantId }  = req.user;
 
     const project =
       await prisma.project.findFirst({
