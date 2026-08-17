@@ -48,7 +48,6 @@ const getFormSubmissions = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      count: submissions.length,
       submissions,
     });
   } catch (error) {
@@ -163,17 +162,6 @@ const deleteFormSubmission = async (req, res) => {
       },
     });
 
-    // await prisma.form.update({
-    //   where: {
-    //     formId: submission.formId,
-    //   },
-
-    //   data: {
-    //     submissionCount: {
-    //       decrement: 1,
-    //     },
-    //   },
-    // });
 
     return res.status(200).json({
       success: true,
