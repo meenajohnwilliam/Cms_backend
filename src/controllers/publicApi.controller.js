@@ -660,17 +660,17 @@ const getPublicForm = async (req, res) => {
       // UPDATE SUBMISSION COUNT
       // ========================================================
   
-      await prisma.form.update({
-        where: {
-          formId: form.formId,
-        },
+    //   await prisma.form.update({
+    //     where: {
+    //       formId: form.formId,
+    //     },
   
-        data: {
-          submissionCount: {
-            increment: 1,
-          },
-        },
-      });
+    //     data: {
+    //       submissionCount: {
+    //         increment: 1,
+    //       },
+    //     },
+    //   });
   
       // ========================================================
       // UPDATE API KEY LAST USED
