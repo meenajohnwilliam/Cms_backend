@@ -9,14 +9,8 @@ const prisma = require("../config/prisma");
 const getFormSubmissions = async (req, res) => {
   try {
     const { formId } = req.params;
-    const { tenantId, role } = req.user;
+    const { tenantId } = req.user;
 
-    if (role !== "ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message: "Only admin can view form submissions",
-      });
-    }
 
     const form = await prisma.form.findFirst({
       where: {
@@ -71,14 +65,8 @@ const getFormSubmissions = async (req, res) => {
 const getFormSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const { tenantId, role } = req.user;
+    const { tenantId } = req.user;
 
-    if (role !== "ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message: "Only admin can view form submissions",
-      });
-    }
 
     const submission =
       await prisma.formSubmission.findFirst({
@@ -126,14 +114,9 @@ const getFormSubmission = async (req, res) => {
 const deleteFormSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const { tenantId, role } = req.user;
+    const { tenantId} = req.user;
 
-    if (role !== "ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message: "Only admin can delete form submissions",
-      });
-    }
+
 
     const submission =
       await prisma.formSubmission.findFirst({
