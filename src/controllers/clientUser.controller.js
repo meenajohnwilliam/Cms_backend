@@ -800,7 +800,7 @@ const getMyProjects = async (req, res) => {
               // ==================================================
               form: {
                 where: {
-                  isActive: true,
+                    status: "PUBLISHED",
                 },
   
                 select: {
@@ -808,7 +808,7 @@ const getMyProjects = async (req, res) => {
                   name: true,
                   slug: true,
                   description: true,
-                  isActive: true,
+                  status: true,
                   createdAt: true,
                   updatedAt: true,
                 },
