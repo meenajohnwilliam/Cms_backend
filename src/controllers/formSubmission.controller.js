@@ -163,17 +163,17 @@ const deleteFormSubmission = async (req, res) => {
       },
     });
 
-    await prisma.form.update({
-      where: {
-        formId: submission.formId,
-      },
+    // await prisma.form.update({
+    //   where: {
+    //     formId: submission.formId,
+    //   },
 
-      data: {
-        submissionCount: {
-          decrement: 1,
-        },
-      },
-    });
+    //   data: {
+    //     submissionCount: {
+    //       decrement: 1,
+    //     },
+    //   },
+    // });
 
     return res.status(200).json({
       success: true,
