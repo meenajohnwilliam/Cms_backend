@@ -38,7 +38,7 @@ router.post(
 router.get(
   "/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getForms
 );
 
@@ -50,7 +50,7 @@ router.get(
 router.get(
   "/:formId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getForm
 );
 
