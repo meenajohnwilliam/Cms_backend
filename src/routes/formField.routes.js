@@ -24,7 +24,7 @@ const router = express.Router();
 // ============================================================
 
 router.post(
-  "/fields/forms/:formId",
+  "/:formId",
   authMiddleware,
   roleMiddleware("ADMIN"),
   createFormField
@@ -36,7 +36,7 @@ router.post(
 // ============================================================
 
 router.get(
-  "/fields/forms/:formId",
+  "/:formId",
   authMiddleware,
   roleMiddleware("ADMIN"),
   getFormFields
