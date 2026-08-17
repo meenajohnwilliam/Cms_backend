@@ -28,28 +28,28 @@ router.post(
 router.get(
   "/collections/:collectionId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getRecords
 );
 
 router.get(
   "/:recordId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getRecord
 );
 
 router.put(
   "/:recordId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   updateRecord
 );
 
 router.delete(
   "/:recordId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   deleteRecord
 );
 
