@@ -95,7 +95,7 @@ const getPublicCollection = async (req, res) => {
     if (!project) {
       return res.status(404).json({
         success: false,
-        message: "Project not found",
+        message: "Invalid Project Api Key",
       });
     }
 
