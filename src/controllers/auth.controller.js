@@ -308,6 +308,7 @@ const adminRegister = async (req, res) => {
 
       subscriptionId:
         result.subscription.subscriptionId,
+
     });
   } catch (error) {
     console.error(
@@ -770,13 +771,55 @@ const login = async (req, res) => {
     // ------------------------------------------
 
     if (!user.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Please verify your email first",
-      });
-    }
+     // ------------------------------------------
+// CHECK EMAIL VERIFICATION
+// ------------------------------------------
 
+if (!user.isEmailVerified) {
+
+  // Generate a new OTP
+  const emailVerificationOtp = generateOTP();
+
+  // OTP valid for 10 minutes
+  const emailVerificationExpires = new Date(
+    Date.now() + 10 * 60 * 1000
+  );
+
+  // Track when OTP was created
+  const emailVerificationOtpCreatedAt = new Date();
+
+  // Save new OTP
+  await prisma.user.update({
+    where: {
+      userId: user.userId,
+    },
+
+    data: {
+      emailVerificationOtp,
+      emailVerificationExpires,
+      emailVerificationOtpCreatedAt,
+    },
+  });
+
+  // Send OTP email
+  await sendVerificationEmail(
+    user.email,
+    user.name,
+    emailVerificationOtp
+  );
+
+  // Do NOT create JWT
+  // Do NOT set authentication cookie
+
+  return res.status(403).json({
+    success: false,
+    requiresVerification: true,
+    message:
+      "Email is not verified. A new OTP has been sent to your email.",
+    email: user.email,
+  });
+}
+    }
     // ------------------------------------------
     // CHECK TENANT
     // ------------------------------------------
