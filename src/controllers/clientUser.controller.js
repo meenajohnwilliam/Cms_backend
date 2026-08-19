@@ -80,6 +80,7 @@ const createClientUser = async (req, res) => {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password: hashedPassword,
+        isEmailVerified : true,
         role: "USER",
         tenantId,
 
