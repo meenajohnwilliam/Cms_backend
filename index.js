@@ -23,7 +23,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://webzspot-cms.netlify.app/",
+      "https://webzspot-cms.netlify.app",
     ],
     credentials: true,
   })
