@@ -22,7 +22,7 @@ const router = express.Router();
 router.post(
   "/collections/:collectionId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   upload.any(),
   createRecord
 );
@@ -45,6 +45,7 @@ router.put(
   "/:recordId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  upload.any(),
   updateRecord
 );
 

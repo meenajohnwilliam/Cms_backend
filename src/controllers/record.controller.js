@@ -1,6 +1,5 @@
 // src/controllers/record.controller.js
 const prisma = require("../config/prisma");
-const upload = require("../config/upload")
 
 // ============================================================
 // VALIDATE RECORD DATA
@@ -413,11 +412,108 @@ const getRecord = async (req, res) => {
 // UPDATE RECORD
 // ============================================================
 
+// const updateRecord = async (req, res) => {
+//   try {
+//     const { recordId } = req.params;
+//     const { data } = req.body;
+//     const { tenantId } = req.user;
+
+//     if (!tenantId) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Tenant not found",
+//       });
+//     }
+
+//     const record =
+//       await prisma.record.findFirst({
+//         where: {
+//           recordId,
+//           collection: {
+//             project: {
+//               tenantId,
+//               isActive: true,
+//             },
+//           },
+//         },
+//         include: {
+//           collection: {
+//             include: {
+//               fields: {
+//                 orderBy: {
+//                   displayOrder: "asc",
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       });
+
+//     if (!record) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Record not found",
+//       });
+//     }
+
+//     if (
+//       record.collection.status !==
+//       "PUBLISHED"
+//     ) {
+//       return res.status(403).json({
+//         success: false,
+//         message:
+//           "Collection is not published",
+//       });
+//     }
+
+//     const validationError =
+//       validateRecordData(
+//         record.collection.fields,
+//         data
+//       );
+
+//     if (validationError) {
+//       return res.status(400).json({
+//         success: false,
+//         message: validationError,
+//       });
+//     }
+
+//     const updatedRecord =
+//       await prisma.record.update({
+//         where: {
+//           recordId,
+//         },
+//         data: {
+//           data,
+//         },
+//       });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Record updated successfully",
+//       record: updatedRecord,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "Update Record Error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//     });
+//   }
+// };
+
 const updateRecord = async (req, res) => {
   try {
     const { recordId } = req.params;
-    const { data } = req.body;
+    let { data } = req.body;
     const { tenantId } = req.user;
+    const files = req.files || [];
 
     if (!tenantId) {
       return res.status(403).json({
@@ -426,29 +522,42 @@ const updateRecord = async (req, res) => {
       });
     }
 
-    const record =
-      await prisma.record.findFirst({
-        where: {
-          recordId,
-          collection: {
-            project: {
-              tenantId,
-              isActive: true,
-            },
+    // multipart/form-data sends data as a string
+    if (typeof data === "string") {
+      try {
+        data = JSON.parse(data);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "data must be valid JSON",
+        });
+      }
+    }
+
+    // Get record + collection + fields
+    const record = await prisma.record.findFirst({
+      where: {
+        recordId,
+        collection: {
+          project: {
+            tenantId,
+            isActive: true,
           },
         },
-        include: {
-          collection: {
-            include: {
-              fields: {
-                orderBy: {
-                  displayOrder: "asc",
-                },
+      },
+      include: {
+        collection: {
+          include: {
+            fields: {
+              orderBy: {
+                displayOrder: "asc",
               },
             },
           },
         },
-      });
+        media: true,
+      },
+    });
 
     if (!record) {
       return res.status(404).json({
@@ -457,22 +566,19 @@ const updateRecord = async (req, res) => {
       });
     }
 
-    if (
-      record.collection.status !==
-      "PUBLISHED"
-    ) {
+    if (record.collection.status !== "PUBLISHED") {
       return res.status(403).json({
         success: false,
-        message:
-          "Collection is not published",
+        message: "Collection is not published",
       });
     }
 
-    const validationError =
-      validateRecordData(
-        record.collection.fields,
-        data
-      );
+    // Validate normal fields + newly uploaded files
+    const validationError = validateRecordData(
+      record.collection.fields,
+      data,
+      files
+    );
 
     if (validationError) {
       return res.status(400).json({
@@ -481,15 +587,70 @@ const updateRecord = async (req, res) => {
       });
     }
 
-    const updatedRecord =
-      await prisma.record.update({
-        where: {
-          recordId,
-        },
+    // Update record data
+    await prisma.record.update({
+      where: {
+        recordId,
+      },
+      data: {
+        data,
+      },
+    });
+
+    // Handle newly uploaded files
+    for (const file of files) {
+      const field = record.collection.fields.find(
+        (item) => item.slug === file.fieldname
+      );
+
+      if (!field) {
+        continue;
+      }
+
+      // Find existing media for this field
+      const existingMedia = record.media.find(
+        (media) => media.fieldId === field.fieldId
+      );
+
+      // Delete old media DB record
+      if (existingMedia) {
+        await prisma.media.delete({
+          where: {
+            mediaId: existingMedia.mediaId,
+          },
+        });
+
+        // TODO:
+        // Delete existingMedia.storageKey from S3 here
+      }
+
+      // Create new media DB record
+      await prisma.media.create({
         data: {
-          data,
+          recordId: record.recordId,
+          fieldId: field.fieldId,
+          type: field.type,
+
+          originalName: file.originalname,
+          fileName: file.key.split("/").pop(),
+          mimeType: file.mimetype,
+          size: file.size,
+
+          storageKey: file.key,
+          url: file.location,
         },
       });
+    }
+
+    // Get final updated record
+    const updatedRecord = await prisma.record.findUnique({
+      where: {
+        recordId,
+      },
+      include: {
+        media: true,
+      },
+    });
 
     return res.status(200).json({
       success: true,
@@ -497,10 +658,7 @@ const updateRecord = async (req, res) => {
       record: updatedRecord,
     });
   } catch (error) {
-    console.error(
-      "Update Record Error:",
-      error
-    );
+    console.error("Update Record Error:", error);
 
     return res.status(500).json({
       success: false,
