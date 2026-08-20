@@ -1,6 +1,6 @@
 // src/controllers/record.controller.js
-
 const prisma = require("../config/prisma");
+const upload = require("../config/upload")
 
 // ============================================================
 // VALIDATE RECORD DATA
@@ -172,11 +172,54 @@ const createRecord = async (req, res) => {
         },
       });
 
+
+      // Profile image + Resume
+    const files = req.files || [];
+
+    for (const file of files) {
+      const field = collection.fields.find(
+        (item) => item.slug === file.fieldname
+      );
+
+      if (!field) {
+        continue;
+      }
+
+      await prisma.media.create({
+        data: {
+          recordId: record.recordId,
+          fieldId: field.fieldId,
+          type: field.type,
+
+          originalName: file.originalname,
+          fileName: file.key.split("/").pop(),
+          mimeType: file.mimetype,
+          size: file.size,
+
+          storageKey: file.key,
+          url: file.location,
+        },
+      });
+    }
+
+    const finalRecord =
+      await prisma.record.findUnique({
+        where: {
+          recordId: record.recordId,
+        },
+        include: {
+          media: true,
+        },
+      });
+
     return res.status(201).json({
       success: true,
       message: "Record created successfully",
-      record,
+      record: finalRecord,
     });
+
+
+
   } catch (error) {
     console.error(
       "Create Record Error:",

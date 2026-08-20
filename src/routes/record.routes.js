@@ -1,6 +1,7 @@
 // src/routes/record.routes.js
 
 const express = require("express");
+const upload = require("../config/upload")
 
 const {
   createRecord,
@@ -22,6 +23,7 @@ router.post(
   "/collections/:collectionId",
   authMiddleware,
   roleMiddleware("ADMIN"),
+  upload.any(),
   createRecord
 );
 

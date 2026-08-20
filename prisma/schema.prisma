@@ -303,12 +303,10 @@ model CollectionField {
 
 model Record {
   recordId        String      @id @default(cuid())
-
   collectionId    String
   collection      Collection  @relation(fields: [collectionId], references: [collectionId], onDelete: Cascade)
-
   data            Json
-
+  media           Media[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -402,3 +400,27 @@ model FormSubmission {
   @@index([formId, createdAt])
 }
 
+model Media {
+  mediaId       String   @id @default(cuid())
+
+  recordId      String
+  record        Record   @relation(fields: [recordId], references: [recordId], onDelete: Cascade)
+
+  fieldId       String?
+
+  type          FieldType
+
+  originalName  String
+  fileName      String
+  mimeType      String
+  size          Int
+
+  storageKey    String
+  url           String
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([recordId])
+  @@index([fieldId])
+}
