@@ -24,6 +24,4 @@ aws: {
 };
 
 
-
-
 module.exports = config;
