@@ -120,14 +120,30 @@ const getCollectionForTenant = async (
 const createRecord = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { data } = req.body;
+    let { data } = req.body;
     const { tenantId } = req.user;
+
+
 
     if (!tenantId) {
       return res.status(403).json({
         success: false,
         message: "Tenant not found",
       });
+    }
+
+    
+
+    // multipart/form-data sends data as a string
+    if (typeof data === "string") {
+      try {
+        data = JSON.parse(data);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "data must be valid JSON",
+        });
+      }
     }
 
     const collection =
