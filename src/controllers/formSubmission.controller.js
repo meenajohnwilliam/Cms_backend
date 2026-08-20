@@ -34,7 +34,9 @@ const getFormSubmissions = async (req, res) => {
         where: {
           formId,
         },
-
+        include: {
+          media: true,
+        },
         orderBy: {
           createdAt: "desc",
         },
@@ -79,6 +81,9 @@ const getFormSubmission = async (req, res) => {
               isActive: true,
             },
           },
+        },
+        include: {
+          media: true,
         },
       });
 
