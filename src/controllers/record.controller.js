@@ -6,7 +6,7 @@ const upload = require("../config/upload")
 // VALIDATE RECORD DATA
 // ============================================================
 
-const validateRecordData = (fields, data) => {
+const validateRecordData = (fields, data, files = []) => {
   if (
     !data ||
     typeof data !== "object" ||
@@ -16,13 +16,44 @@ const validateRecordData = (fields, data) => {
   }
 
   for (const field of fields) {
+
+    // ============================================================
+    // FILE / IMAGE FIELD
+    // ============================================================
+
+    if (
+      field.type === "IMAGE" ||
+      field.type === "FILE"
+    ) {
+      const uploadedFile = files.find(
+        (file) => file.fieldname === field.slug
+      );
+
+      if (
+        field.isRequired &&
+        !uploadedFile
+      ) {
+        return `${field.name} is required`;
+      }
+
+      // If file is not required and not uploaded,
+      // nothing else to validate.
+      continue;
+    }
+
+    // ============================================================
+    // NORMAL FIELD
+    // ============================================================
+
     const value = data[field.slug];
 
     if (
       field.isRequired &&
-      (value === undefined ||
+      (
+        value === undefined ||
         value === null ||
-        value === "")
+        value === ""
+      )
     ) {
       return `${field.name} is required`;
     }
@@ -34,32 +65,42 @@ const validateRecordData = (fields, data) => {
       continue;
     }
 
+    // ============================================================
+    // TYPE VALIDATION
+    // ============================================================
+
     switch (field.type) {
+
       case "TEXT":
       case "RICHTEXT":
-      case "IMAGE":
-      case "FILE":
+
         if (typeof value !== "string") {
           return `${field.name} must be a string`;
         }
+
         break;
 
       case "NUMBER":
+
         if (
           typeof value !== "number" ||
           Number.isNaN(value)
         ) {
           return `${field.name} must be a number`;
         }
+
         break;
 
       case "BOOLEAN":
+
         if (typeof value !== "boolean") {
           return `${field.name} must be a boolean`;
         }
+
         break;
 
       case "DATE":
+
         if (
           typeof value !== "string" ||
           Number.isNaN(
@@ -68,15 +109,18 @@ const validateRecordData = (fields, data) => {
         ) {
           return `${field.name} must be a valid date`;
         }
+
         break;
 
       case "JSON":
+
         if (
           typeof value !== "object" ||
           Array.isArray(value)
         ) {
           return `${field.name} must be a JSON object`;
         }
+
         break;
 
       default:
@@ -170,7 +214,8 @@ const createRecord = async (req, res) => {
     const validationError =
       validateRecordData(
         collection.fields,
-        data
+        data,
+        req.files || []
       );
 
     if (validationError) {
