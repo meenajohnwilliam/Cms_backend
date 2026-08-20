@@ -323,15 +323,17 @@ const getRecords = async (req, res) => {
       });
     }
 
-    const records =
-      await prisma.record.findMany({
-        where: {
-          collectionId,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    const records = await prisma.record.findMany({
+      where: {
+        collectionId,
+      },
+      include: {
+        media: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
     return res.status(200).json({
       success: true,
@@ -377,6 +379,9 @@ const getRecord = async (req, res) => {
               isActive: true,
             },
           },
+        },
+        include: {
+          media: true,
         },
       });
 
