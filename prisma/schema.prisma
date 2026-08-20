@@ -393,6 +393,8 @@ model FormSubmission {
 
   data         Json
 
+  media        Media[]
+
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -403,8 +405,11 @@ model FormSubmission {
 model Media {
   mediaId       String   @id @default(cuid())
 
-  recordId      String
-  record        Record   @relation(fields: [recordId], references: [recordId], onDelete: Cascade)
+  recordId      String?
+  record        Record?  @relation(fields: [recordId], references: [recordId], onDelete: Cascade)
+
+  submissionId String?
+  submission   FormSubmission? @relation(fields: [submissionId], references: [submissionId], onDelete: Cascade)
 
   fieldId       String?
 

@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const prisma = require("../config/prisma");
 
+
 // ============================================================
 // HASH API KEY
 // ============================================================
@@ -464,6 +465,255 @@ const getPublicForm = async (req, res) => {
   // PUBLIC SUBMIT FORM
   // ============================================================
   
+  // const submitPublicForm = async (req, res) => {
+  //   try {
+  //     const { projectSlug, formSlug } = req.params;
+  
+  //     const apiKey = req.headers["x-api-key"];
+  
+  //     // ========================================================
+  //     // CHECK API KEY
+  //     // ========================================================
+  
+  //     if (!apiKey) {
+  //       return res.status(401).json({
+  //         success: false,
+  //         message: "API key is required",
+  //       });
+  //     }
+  
+  //     if (
+  //       typeof apiKey !== "string" ||
+  //       !apiKey.startsWith("cms_live_")
+  //     ) {
+  //       return res.status(401).json({
+  //         success: false,
+  //         message: "Invalid API key",
+  //       });
+  //     }
+  
+  //     const keyHash = hashApiKey(apiKey);
+  
+  //     // ========================================================
+  //     // FIND API KEY
+  //     // ========================================================
+  
+  //     const apiKeyRecord =
+  //       await prisma.apiKey.findUnique({
+  //         where: {
+  //           keyHash,
+  //         },
+  
+  //         include: {
+  //           project: true,
+  //         },
+  //       });
+  
+  //     if (!apiKeyRecord) {
+  //       return res.status(401).json({
+  //         success: false,
+  //         message: "Invalid API key",
+  //       });
+  //     }
+  
+  //     if (!apiKeyRecord.isActive) {
+  //       return res.status(403).json({
+  //         success: false,
+  //         message: "API key is inactive",
+  //       });
+  //     }
+  
+  //     // ========================================================
+  //     // CHECK PROJECT
+  //     // ========================================================
+  
+  //     const project =
+  //       await prisma.project.findFirst({
+  //         where: {
+  //           projectId:
+  //             apiKeyRecord.projectId,
+  
+  //           slug: projectSlug,
+  
+  //           isActive: true,
+  //         },
+  //       });
+  
+  //     if (!project) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message: "Project not found",
+  //       });
+  //     }
+  
+  //     // ========================================================
+  //     // CHECK SUBSCRIPTION
+  //     // ========================================================
+  
+  //     const subscription =
+  //       await prisma.subscription.findFirst({
+  //         where: {
+  //           tenantId: project.tenantId,
+  
+  //           status: "ACTIVE",
+  //         },
+  
+  //         orderBy: {
+  //           createdAt: "desc",
+  //         },
+  //       });
+  
+  //     if (!subscription) {
+  //       return res.status(403).json({
+  //         success: false,
+  //         message:
+  //           "Subscription inactive. Please make payment to use the API.",
+  //       });
+  //     }
+  
+  //     // ========================================================
+  //     // FIND PUBLISHED FORM
+  //     // ========================================================
+  
+  //     const form =
+  //       await prisma.form.findFirst({
+  //         where: {
+  //           projectId:
+  //             project.projectId,
+  
+  //           slug: formSlug,
+  
+  //           status: "PUBLISHED",
+  //         },
+  
+  //         include: {
+  //           fields: {
+  //             orderBy: {
+  //               displayOrder: "asc",
+  //             },
+  //           },
+  //         },
+  //       });
+  
+  //     if (!form) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message:
+  //           "Published form not found",
+  //       });
+  //     }
+  
+  //     // ========================================================
+  //     // VALIDATE SUBMITTED DATA
+  //     // ========================================================
+  
+  //     const data = req.body;
+  
+  //     if (
+  //       !data ||
+  //       typeof data !== "object" ||
+  //       Array.isArray(data)
+  //     ) {
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: "Form data is required",
+  //       });
+  //     }
+  
+  //     // ========================================================
+  //     // CHECK REQUIRED FIELDS
+  //     // ========================================================
+  
+  //     for (const field of form.fields) {
+  //       if (!field.required) {
+  //         continue;
+  //       }
+  
+  //       const value = data[field.name];
+  
+  //       if (
+  //         value === undefined ||
+  //         value === null ||
+  //         value === ""
+  //       ) {
+  //         return res.status(400).json({
+  //           success: false,
+  //           message:
+  //             `${field.label} is required`,
+  //           field: field.name,
+  //         });
+  //       }
+  //     }
+  
+  //     // ========================================================
+  //     // SAVE SUBMISSION
+  //     // ========================================================
+  
+  //     const submission =
+  //       await prisma.formSubmission.create({
+  //         data: {
+  //           formId: form.formId,
+  //           data,
+  //         },
+  //       });
+  
+  //     // ========================================================
+  //     // UPDATE SUBMISSION COUNT
+  //     // ========================================================
+  
+  //   //   await prisma.form.update({
+  //   //     where: {
+  //   //       formId: form.formId,
+  //   //     },
+  
+  //   //     data: {
+  //   //       submissionCount: {
+  //   //         increment: 1,
+  //   //       },
+  //   //     },
+  //   //   });
+  
+  //     // ========================================================
+  //     // UPDATE API KEY LAST USED
+  //     // ========================================================
+  
+  //     await prisma.apiKey.update({
+  //       where: {
+  //         apiKeyId:
+  //           apiKeyRecord.apiKeyId,
+  //       },
+  
+  //       data: {
+  //         lastUsedAt: new Date(),
+  //       },
+  //     });
+  
+  //     // ========================================================
+  //     // RESPONSE
+  //     // ========================================================
+  
+  //     return res.status(201).json({
+  //       success: true,
+  
+  //       message:
+  //         "Form submitted successfully",
+  
+  //       submissionId:
+  //         submission.submissionId,
+  //     });
+  //   } catch (error) {
+  //     console.error(
+  //       "Public Form Submit API Error:",
+  //       error
+  //     );
+  
+  //     return res.status(500).json({
+  //       success: false,
+  //       message: "Internal server error",
+  //     });
+  //   }
+  // };
+
   const submitPublicForm = async (req, res) => {
     try {
       const { projectSlug, formSlug } = req.params;
@@ -529,11 +779,8 @@ const getPublicForm = async (req, res) => {
       const project =
         await prisma.project.findFirst({
           where: {
-            projectId:
-              apiKeyRecord.projectId,
-  
+            projectId: apiKeyRecord.projectId,
             slug: projectSlug,
-  
             isActive: true,
           },
         });
@@ -553,7 +800,6 @@ const getPublicForm = async (req, res) => {
         await prisma.subscription.findFirst({
           where: {
             tenantId: project.tenantId,
-  
             status: "ACTIVE",
           },
   
@@ -577,11 +823,8 @@ const getPublicForm = async (req, res) => {
       const form =
         await prisma.form.findFirst({
           where: {
-            projectId:
-              project.projectId,
-  
+            projectId: project.projectId,
             slug: formSlug,
-  
             status: "PUBLISHED",
           },
   
@@ -597,37 +840,50 @@ const getPublicForm = async (req, res) => {
       if (!form) {
         return res.status(404).json({
           success: false,
-          message:
-            "Published form not found",
+          message: "Published form not found",
         });
       }
   
       // ========================================================
-      // VALIDATE SUBMITTED DATA
+      // FORM DATA
       // ========================================================
   
-      const data = req.body;
-  
-      if (
-        !data ||
-        typeof data !== "object" ||
-        Array.isArray(data)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Form data is required",
-        });
-      }
+      let data = req.body;
   
       // ========================================================
       // CHECK REQUIRED FIELDS
       // ========================================================
   
       for (const field of form.fields) {
+  
         if (!field.required) {
           continue;
         }
   
+        // FILE / IMAGE FIELD
+        if (
+          field.type === "IMAGE" ||
+          field.type === "FILE"
+        ) {
+          const uploadedFile =
+            (req.files || []).find(
+              (file) =>
+                file.fieldname === field.name
+            );
+  
+          if (!uploadedFile) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `${field.label} is required`,
+              field: field.name,
+            });
+          }
+  
+          continue;
+        }
+  
+        // NORMAL FIELD
         const value = data[field.name];
   
         if (
@@ -657,20 +913,54 @@ const getPublicForm = async (req, res) => {
         });
   
       // ========================================================
-      // UPDATE SUBMISSION COUNT
+      // SAVE UPLOADED FILES
       // ========================================================
   
-    //   await prisma.form.update({
-    //     where: {
-    //       formId: form.formId,
-    //     },
+      const files = req.files || [];
   
-    //     data: {
-    //       submissionCount: {
-    //         increment: 1,
-    //       },
-    //     },
-    //   });
+      for (const file of files) {
+  
+        const field =
+          form.fields.find(
+            (item) =>
+              item.name === file.fieldname
+          );
+  
+        if (!field) {
+          continue;
+        }
+  
+        await prisma.media.create({
+          data: {
+            submissionId:
+              submission.submissionId,
+  
+            fieldId:
+              field.fieldId,
+  
+            type:
+              field.type,
+  
+            originalName:
+              file.originalname,
+  
+            fileName:
+              file.key.split("/").pop(),
+  
+            mimeType:
+              file.mimetype,
+  
+            size:
+              file.size,
+  
+            storageKey:
+              file.key,
+  
+            url:
+              file.location,
+          },
+        });
+      }
   
       // ========================================================
       // UPDATE API KEY LAST USED
@@ -700,7 +990,9 @@ const getPublicForm = async (req, res) => {
         submissionId:
           submission.submissionId,
       });
+  
     } catch (error) {
+  
       console.error(
         "Public Form Submit API Error:",
         error

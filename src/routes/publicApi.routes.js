@@ -1,6 +1,7 @@
 // src/routes/publicApi.routes.js
 
 const express = require("express");
+const upload = require("../config/upload")
 
 const {
   getPublicCollection,
@@ -34,6 +35,7 @@ router.get(
 
 router.post(
   "/:projectSlug/forms/:formSlug/submit",
+  upload.any(),
   submitPublicForm
 );
 
