@@ -166,6 +166,22 @@ const createRecord = async (req, res) => {
     let { data } = req.body;
     const { tenantId } = req.user;
 
+    console.log("========== UPLOAD DEBUG ==========");
+
+    req.files.forEach((file) => {
+      console.log({
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        key: file.key,
+        location: file.location,
+        bucket: file.bucket,
+      });
+    });
+
+    console.log("==================================");
+
 
 
     if (!tenantId) {
@@ -189,8 +205,7 @@ const createRecord = async (req, res) => {
       }
     }
 
-    const collection =
-      await getCollectionForTenant(
+    const collection = await getCollectionForTenant(
         collectionId,
         tenantId
       );
@@ -224,8 +239,7 @@ const createRecord = async (req, res) => {
       });
     }
 
-    const record =
-      await prisma.record.create({
+    const record = await prisma.record.create({
         data: {
           collectionId,
           data,
@@ -250,12 +264,10 @@ const createRecord = async (req, res) => {
           recordId: record.recordId,
           fieldId: field.fieldId,
           type: field.type,
-
           originalName: file.originalname,
           fileName: file.key.split("/").pop(),
           mimeType: file.mimetype,
           size: file.size,
-
           storageKey: file.key,
           url: file.location,
         },
