@@ -713,312 +713,298 @@ const getPublicForm = async (req, res) => {
   //     });
   //   }
   // };
+
   const submitPublicForm = async (req, res) => {
-    try {
-      const { projectSlug, formSlug } = req.params;
-  
-      const apiKey = req.headers["x-api-key"];
-  
-      // ========================================================
-      // CHECK API KEY
-      // ========================================================
-  
-      if (!apiKey) {
-        return res.status(401).json({
-          success: false,
-          message: "API key is required",
-        });
-      }
-  
-      if (
-        typeof apiKey !== "string" ||
-        !apiKey.startsWith("cms_live_")
-      ) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid API key",
-        });
-      }
-  
-      const keyHash = hashApiKey(apiKey);
-  
-      // ========================================================
-      // FIND API KEY
-      // ========================================================
-  
-      const apiKeyRecord =
-        await prisma.apiKey.findUnique({
-          where: {
-            keyHash,
-          },
-  
-          include: {
-            project: true,
-          },
-        });
-  
-      if (!apiKeyRecord) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid API key",
-        });
-      }
-  
-      if (!apiKeyRecord.isActive) {
-        return res.status(403).json({
-          success: false,
-          message: "API key is inactive",
-        });
-      }
-  
-      // ========================================================
-      // CHECK PROJECT
-      // ========================================================
-  
-      const project =
-        await prisma.project.findFirst({
-          where: {
-            projectId: apiKeyRecord.projectId,
-            slug: projectSlug,
-            isActive: true,
-          },
-        });
-  
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          message: "Project not found",
-        });
-      }
-  
-      // ========================================================
-      // CHECK SUBSCRIPTION
-      // ========================================================
-  
-      const subscription =
-        await prisma.subscription.findFirst({
-          where: {
-            tenantId: project.tenantId,
-            status: "ACTIVE",
-          },
-  
-          orderBy: {
-            createdAt: "desc",
-          },
-        });
-  
-      if (!subscription) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Subscription inactive. Please make payment to use the API.",
-        });
-      }
-  
-      // ========================================================
-      // FIND PUBLISHED FORM
-      // ========================================================
-  
-      const form =
-        await prisma.form.findFirst({
-          where: {
-            projectId: project.projectId,
-            slug: formSlug,
-            status: "PUBLISHED",
-          },
-  
-          include: {
-            fields: {
-              orderBy: {
-                displayOrder: "asc",
-              },
+  try {
+    const { projectSlug, formSlug } = req.params;
+
+    const apiKey = req.headers["x-api-key"];
+
+    // ========================================================
+    // CHECK API KEY
+    // ========================================================
+
+    if (!apiKey) {
+      return res.status(401).json({
+        success: false,
+        message: "API key is required",
+      });
+    }
+
+    if (
+      typeof apiKey !== "string" ||
+      !apiKey.startsWith("cms_live_")
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid API key",
+      });
+    }
+
+    const keyHash = hashApiKey(apiKey);
+
+    // ========================================================
+    // FIND API KEY
+    // ========================================================
+
+    const apiKeyRecord =
+      await prisma.apiKey.findUnique({
+        where: {
+          keyHash,
+        },
+
+        include: {
+          project: true,
+        },
+      });
+
+    if (!apiKeyRecord) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid API key",
+      });
+    }
+
+    if (!apiKeyRecord.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "API key is inactive",
+      });
+    }
+
+    // ========================================================
+    // CHECK PROJECT
+    // ========================================================
+
+    const project =
+      await prisma.project.findFirst({
+        where: {
+          projectId: apiKeyRecord.projectId,
+          slug: projectSlug,
+          isActive: true,
+        },
+      });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    // ========================================================
+    // CHECK SUBSCRIPTION
+    // ========================================================
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId: project.tenantId,
+          status: "ACTIVE",
+        },
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Subscription inactive. Please make payment to use the API.",
+      });
+    }
+
+    // ========================================================
+    // FIND PUBLISHED FORM
+    // ========================================================
+
+    const form =
+      await prisma.form.findFirst({
+        where: {
+          projectId: project.projectId,
+          slug: formSlug,
+          status: "PUBLISHED",
+        },
+
+        include: {
+          fields: {
+            orderBy: {
+              displayOrder: "asc",
             },
           },
-        });
-  
-      if (!form) {
-        return res.status(404).json({
-          success: false,
-          message: "Published form not found",
-        });
+        },
+      });
+
+    if (!form) {
+      return res.status(404).json({
+        success: false,
+        message: "Published form not found",
+      });
+    }
+
+    // ========================================================
+    // FORM DATA
+    // ========================================================
+
+    let data = req.body;
+
+    // ========================================================
+    // CHECK REQUIRED FIELDS
+    // ========================================================
+
+    for (const field of form.fields) {
+
+      if (!field.required) {
+        continue;
       }
-  
-      // ========================================================
-      // FILES
-      // ========================================================
-  
-      const files = req.files || [];
-  
-      // ========================================================
-      // FORM DATA
-      // ========================================================
-  
-      const data = {
-        ...req.body,
-      };
-  
-      // ========================================================
-      // CHECK REQUIRED FIELDS
-      // ========================================================
-  
-      for (const field of form.fields) {
-        if (!field.required) {
-          continue;
-        }
-  
-        // ======================================================
-        // IMAGE / FILE FIELD
-        // ======================================================
-  
-        if (
-          field.type === "IMAGE" ||
-          field.type === "FILE"
-        ) {
-          const uploadedFile = files.find(
+
+      // FILE / IMAGE FIELD
+      if (
+        field.type === "IMAGE" ||
+        field.type === "FILE"
+      ) {
+        const uploadedFile =
+          (req.files || []).find(
             (file) =>
               file.fieldname === field.name
           );
-  
-          if (!uploadedFile) {
-            return res.status(400).json({
-              success: false,
-              message: `${field.label} is required`,
-              field: field.name,
-            });
-          }
-  
-          continue;
-        }
-  
-        // ======================================================
-        // NORMAL FIELD
-        // ======================================================
-  
-        const value = data[field.name];
-  
-        if (
-          value === undefined ||
-          value === null ||
-          value === ""
-        ) {
+
+        if (!uploadedFile) {
           return res.status(400).json({
             success: false,
-            message: `${field.label} is required`,
+            message:
+              `${field.label} is required`,
             field: field.name,
           });
         }
+
+        continue;
       }
-  
-      // ========================================================
-      // REMOVE FILE FIELD VALUES FROM DATA
-      // ========================================================
-  
-      for (const field of form.fields) {
-        if (
-          field.type === "IMAGE" ||
-          field.type === "FILE"
-        ) {
-          delete data[field.name];
-        }
-      }
-  
-      // ========================================================
-      // SAVE SUBMISSION
-      // ========================================================
-  
-      const submission =
-        await prisma.formSubmission.create({
-          data: {
-            formId: form.formId,
-            data,
-          },
-        });
-  
-      // ========================================================
-      // SAVE MEDIA
-      // ========================================================
-  
-      for (const file of files) {
-        const field =
-          form.fields.find(
-            (item) =>
-              item.name === file.fieldname
-          );
-  
-        if (!field) {
-          continue;
-        }
-  
-        await prisma.media.create({
-          data: {
-            submissionId:
-              submission.submissionId,
-  
-            fieldId:
-              field.fieldId,
-  
-            type:
-              field.type,
-  
-            originalName:
-              file.originalname,
-  
-            fileName:
-              file.key.split("/").pop(),
-  
-            mimeType:
-              file.mimetype,
-  
-            size:
-              file.size,
-  
-            storageKey:
-              file.key,
-  
-            url:
-              file.location,
-          },
+
+      // NORMAL FIELD
+      const value = data[field.name];
+
+      if (
+        value === undefined ||
+        value === null ||
+        value === ""
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `${field.label} is required`,
+          field: field.name,
         });
       }
-  
-      // ========================================================
-      // UPDATE API KEY LAST USED
-      // ========================================================
-  
-      await prisma.apiKey.update({
-        where: {
-          apiKeyId:
-            apiKeyRecord.apiKeyId,
-        },
-  
+    }
+
+    // ========================================================
+    // SAVE SUBMISSION
+    // ========================================================
+
+    const submission =
+      await prisma.formSubmission.create({
         data: {
-          lastUsedAt: new Date(),
+          formId: form.formId,
+          data,
         },
       });
-  
-      // ========================================================
-      // RESPONSE
-      // ========================================================
-  
-      return res.status(201).json({
-        success: true,
-        message: "Form submitted successfully",
-        submissionId:
-          submission.submissionId,
-      });
-  
-    } catch (error) {
-      console.error(
-        "Public Form Submit API Error:",
-        error
-      );
-  
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
+
+    // ========================================================
+    // SAVE UPLOADED FILES
+    // ========================================================
+
+    const files = req.files || [];
+
+    for (const file of files) {
+
+      const field =
+        form.fields.find(
+          (item) =>
+            item.name === file.fieldname
+        );
+
+      if (!field) {
+        continue;
+      }
+
+      await prisma.media.create({
+        data: {
+          submissionId:
+            submission.submissionId,
+
+          fieldId:
+            field.fieldId,
+
+          type:
+            field.type,
+
+          originalName:
+            file.originalname,
+
+          fileName:
+            file.key.split("/").pop(),
+
+          mimeType:
+            file.mimetype,
+
+          size:
+            file.size,
+
+          storageKey:
+            file.key,
+
+          url:
+            file.location,
+        },
       });
     }
-  };
+
+    // ========================================================
+    // UPDATE API KEY LAST USED
+    // ========================================================
+
+    await prisma.apiKey.update({
+      where: {
+        apiKeyId:
+          apiKeyRecord.apiKeyId,
+      },
+
+      data: {
+        lastUsedAt: new Date(),
+      },
+    });
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        "Form submitted successfully",
+
+      submissionId:
+        submission.submissionId,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Public Form Submit API Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+  
 
 module.exports = {
   getPublicCollection,
