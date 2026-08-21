@@ -713,7 +713,6 @@ const getPublicForm = async (req, res) => {
   //     });
   //   }
   // };
-
   const submitPublicForm = async (req, res) => {
     try {
       const { projectSlug, formSlug } = req.params;
@@ -845,37 +844,45 @@ const getPublicForm = async (req, res) => {
       }
   
       // ========================================================
+      // FILES
+      // ========================================================
+  
+      const files = req.files || [];
+  
+      // ========================================================
       // FORM DATA
       // ========================================================
   
-      let data = req.body;
+      const data = {
+        ...req.body,
+      };
   
       // ========================================================
       // CHECK REQUIRED FIELDS
       // ========================================================
   
       for (const field of form.fields) {
-  
         if (!field.required) {
           continue;
         }
   
-        // FILE / IMAGE FIELD
+        // ======================================================
+        // IMAGE / FILE FIELD
+        // ======================================================
+  
         if (
           field.type === "IMAGE" ||
           field.type === "FILE"
         ) {
-          const uploadedFile =
-            (req.files || []).find(
-              (file) =>
-                file.fieldname === field.name
-            );
+          const uploadedFile = files.find(
+            (file) =>
+              file.fieldname === field.name
+          );
   
           if (!uploadedFile) {
             return res.status(400).json({
               success: false,
-              message:
-                `${field.label} is required`,
+              message: `${field.label} is required`,
               field: field.name,
             });
           }
@@ -883,7 +890,10 @@ const getPublicForm = async (req, res) => {
           continue;
         }
   
+        // ======================================================
         // NORMAL FIELD
+        // ======================================================
+  
         const value = data[field.name];
   
         if (
@@ -893,10 +903,22 @@ const getPublicForm = async (req, res) => {
         ) {
           return res.status(400).json({
             success: false,
-            message:
-              `${field.label} is required`,
+            message: `${field.label} is required`,
             field: field.name,
           });
+        }
+      }
+  
+      // ========================================================
+      // REMOVE FILE FIELD VALUES FROM DATA
+      // ========================================================
+  
+      for (const field of form.fields) {
+        if (
+          field.type === "IMAGE" ||
+          field.type === "FILE"
+        ) {
+          delete data[field.name];
         }
       }
   
@@ -913,13 +935,10 @@ const getPublicForm = async (req, res) => {
         });
   
       // ========================================================
-      // SAVE UPLOADED FILES
+      // SAVE MEDIA
       // ========================================================
   
-      const files = req.files || [];
-  
       for (const file of files) {
-  
         const field =
           form.fields.find(
             (item) =>
@@ -983,16 +1002,12 @@ const getPublicForm = async (req, res) => {
   
       return res.status(201).json({
         success: true,
-  
-        message:
-          "Form submitted successfully",
-  
+        message: "Form submitted successfully",
         submissionId:
           submission.submissionId,
       });
   
     } catch (error) {
-  
       console.error(
         "Public Form Submit API Error:",
         error
@@ -1004,7 +1019,6 @@ const getPublicForm = async (req, res) => {
       });
     }
   };
-  
 
 module.exports = {
   getPublicCollection,
