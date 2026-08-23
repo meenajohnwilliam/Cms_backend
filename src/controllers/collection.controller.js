@@ -18,7 +18,7 @@ const createCollection = async (req, res) => {
   try {
     const { projectId } = req.params;
     const { name } = req.body;
-    const { tenantId } = req.params
+    const { tenantId } = req.user
   
 
     if (!tenantId) {
