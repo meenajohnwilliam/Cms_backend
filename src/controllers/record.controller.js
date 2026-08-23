@@ -191,6 +191,7 @@ const createRecord = async (req, res) => {
       });
     }
 
+    const files = req.files || [];
     
 
     // multipart/form-data sends data as a string
@@ -229,13 +230,121 @@ const createRecord = async (req, res) => {
       validateRecordData(
         collection.fields,
         data,
-        req.files || []
+        files
       );
 
     if (validationError) {
       return res.status(400).json({
         success: false,
         message: validationError,
+      });
+    }
+
+
+    // ========================================================
+    // GET ACTIVE SUBSCRIPTION
+    // ========================================================
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: "ACTIVE",
+        },
+        include: {
+          plan: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(403).json({
+        success: false,
+        message: "Active subscription required",
+      });
+    }
+
+      // ========================================================
+    // GET TENANT USAGE
+    // ========================================================
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
+
+
+    // ========================================================
+    // WRITE REQUEST LIMIT
+    // ========================================================
+
+    const writeRequestLimit =
+      subscription.plan.writeRequestLimit;
+
+    // -1 = Unlimited
+
+    if (
+      writeRequestLimit !== -1 &&
+      usage.writeRequestsUsed >= writeRequestLimit
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Write request limit reached",
+        usage: {
+          used: usage.writeRequestsUsed,
+          limit: writeRequestLimit,
+        },
+      });
+    }
+
+
+        // ========================================================
+    // CALCULATE UPLOAD STORAGE
+    // ========================================================
+
+    const uploadedBytes = files.reduce(
+      (total, file) => {
+        return total + (file.size || 0);
+      },
+      0
+    );
+
+    // Convert bytes → MB
+
+    const uploadedMb = uploadedBytes / (1024 * 1024);
+
+       // ========================================================
+    // STORAGE LIMIT
+    // ========================================================
+
+    const storageLimitMb =
+      subscription.plan.storageLimitMb;
+
+    // -1 = Unlimited
+
+    if (
+      storageLimitMb !== -1 &&
+      usage.storageUsedMb + uploadedMb >
+        storageLimitMb
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Storage limit reached",
+        usage: {
+          usedMb: usage.storageUsedMb,
+          limitMb: storageLimitMb,
+        },
       });
     }
 
@@ -247,8 +356,7 @@ const createRecord = async (req, res) => {
       });
 
 
-      // Profile image + Resume
-    const files = req.files || [];
+ 
 
     for (const file of files) {
       const field = collection.fields.find(
@@ -275,6 +383,37 @@ const createRecord = async (req, res) => {
         },
       });
     }
+
+
+       // ========================================================
+    // INCREASE WRITE REQUEST USAGE
+    // ========================================================
+
+    await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        writeRequestsUsed: {
+          increment: 1,
+        },
+      },
+    });
+
+
+    if (uploadedMb > 0) {
+      await prisma.usage.update({
+        where: {
+          tenantId,
+        },
+        data: {
+          storageUsedMb: {
+            increment: uploadedMb,
+          },
+        },
+      });
+    }
+
 
     const finalRecord =
       await prisma.record.findUnique({
