@@ -166,21 +166,21 @@ const createRecord = async (req, res) => {
     let { data } = req.body;
     const { tenantId } = req.user;
 
-    console.log("========== UPLOAD DEBUG ==========");
+    // console.log("========== UPLOAD DEBUG ==========");
 
-    req.files.forEach((file) => {
-      console.log({
-        fieldname: file.fieldname,
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        size: file.size,
-        key: file.key,
-        location: file.location,
-        bucket: file.bucket,
-      });
-    });
+    // // req.files.forEach((file) => {
+    // //   console.log({
+    // //     fieldname: file.fieldname,
+    // //     originalname: file.originalname,
+    // //     mimetype: file.mimetype,
+    // //     size: file.size,
+    // //     key: file.key,
+    // //     location: file.location,
+    // //     bucket: file.bucket,
+    // //   });
+    // // });
 
-    console.log("==================================");
+    // console.log("==================================");
 
 
 
@@ -289,24 +289,24 @@ const createRecord = async (req, res) => {
     // WRITE REQUEST LIMIT
     // ========================================================
 
-    const writeRequestLimit =
-      subscription.plan.writeRequestLimit;
+    const writeRequestsLimit =
+    subscription.plan.writeRequestsLimit;
 
-    // -1 = Unlimited
+  // -1 = Unlimited
 
-    if (
-      writeRequestLimit !== -1 &&
-      usage.writeRequestsUsed >= writeRequestLimit
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Write request limit reached",
-        usage: {
-          used: usage.writeRequestsUsed,
-          limit: writeRequestLimit,
-        },
-      });
-    }
+  if (
+    writeRequestsLimit !== -1 &&
+    usage.writeRequestsUsed >= writeRequestsLimit
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "Write request limit reached",
+      usage: {
+        used: usage.writeRequestsUsed,
+        limit: writeRequestsLimit,
+      },
+    });
+  }
 
 
         // ========================================================
@@ -315,37 +315,39 @@ const createRecord = async (req, res) => {
 
     const uploadedBytes = files.reduce(
       (total, file) => {
-        return total + (file.size || 0);
+        return total + BigInt(file.size || 0);
       },
-      0
+      0n
     );
 
-    // Convert bytes → MB
 
-    const uploadedMb = uploadedBytes / (1024 * 1024);
 
-       // ========================================================
+    // ========================================================
     // STORAGE LIMIT
     // ========================================================
 
-    const storageLimitMb =
-      subscription.plan.storageLimitMb;
+    const storageLimit = subscription.plan.storageLimit;
 
-    // -1 = Unlimited
+    if (storageLimit !== -1) {
+      const storageLimitBytes =
+        BigInt(storageLimit) *
+        1024n *
+        1024n *
+        1024n;
 
-    if (
-      storageLimitMb !== -1 &&
-      usage.storageUsedMb + uploadedMb >
-        storageLimitMb
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Storage limit reached",
-        usage: {
-          usedMb: usage.storageUsedMb,
-          limitMb: storageLimitMb,
-        },
-      });
+      if (
+        usage.storageUsedBytes + uploadedBytes >
+        storageLimitBytes
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Storage limit reached",
+          usage: {
+            usedBytes: usage.storageUsedBytes.toString(),
+            limit: storageLimit,
+          },
+        });
+      }
     }
 
     const record = await prisma.record.create({
@@ -401,14 +403,14 @@ const createRecord = async (req, res) => {
     });
 
 
-    if (uploadedMb > 0) {
+    if (uploadedBytes  > 0) {
       await prisma.usage.update({
         where: {
           tenantId,
         },
         data: {
-          storageUsedMb: {
-            increment: uploadedMb,
+          storageUsedBytes: {
+            increment: uploadedBytes,
           },
         },
       });
