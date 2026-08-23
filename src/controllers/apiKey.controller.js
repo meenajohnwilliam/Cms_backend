@@ -90,30 +90,41 @@ const createApiKey = async (req, res) => {
       });
     }
 
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
     // ========================================================
     // CHECK API KEY LIMIT
     // ========================================================
 
-    const apiKeyCount =
-      await prisma.apiKey.count({
-        where: {
-          project: {
-            tenantId,
-          },
-          isActive: true,
-        },
-      });
+    const apiKeyLimit = subscription.plan.apiKeyLimit;
 
-    if (
-      subscription.plan.apiKeyLimit !== -1 &&
-      apiKeyCount >=
-        subscription.plan.apiKeyLimit
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "API key limit reached",
-      });
-    }
+  // -1 = Unlimited
+
+  if (
+    apiKeyLimit !== -1 &&
+    usage.apiKeysUsed >= apiKeyLimit
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "API key limit reached",
+      usage: {
+        used: usage.apiKeysUsed,
+        limit: apiKeyLimit,
+      },
+    });
+  }
 
     // ========================================================
     // GENERATE KEY
@@ -139,9 +150,21 @@ const createApiKey = async (req, res) => {
         },
       });
 
+  // ========================================================
+    // INCREASE API KEY USAGE
     // ========================================================
-    // RETURN RAW KEY ONLY NOW
-    // ========================================================
+
+    const updatedUsage =
+      await prisma.usage.update({
+        where: {
+          tenantId,
+        },
+        data: {
+          apiKeysUsed: {
+            increment: 1,
+          },
+        },
+      });
 
     return res.status(201).json({
       success: true,
@@ -163,6 +186,10 @@ const createApiKey = async (req, res) => {
 
         createdAt:
           createdApiKey.createdAt,
+      },
+      usage: {
+        apiKeysUsed: updatedUsage.apiKeysUsed,
+        apiKeyLimit,
       },
     });
   } catch (error) {
@@ -424,8 +451,14 @@ const deleteApiKey = async (req, res) => {
     const { apiKeyId } = req.params;
     const { tenantId } = req.user;
 
-    const apiKey =
-      await prisma.apiKey.findFirst({
+    if (!tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    const apiKey = await prisma.apiKey.findFirst({
         where: {
           apiKeyId,
           project: {
@@ -447,6 +480,17 @@ const deleteApiKey = async (req, res) => {
         apiKeyId,
       },
     });
+
+    await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        apiKeysUsed: {
+          decrement: 1,
+        },
+      },
+    })
 
     return res.status(200).json({
       success: true,
