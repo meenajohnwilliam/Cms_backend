@@ -591,7 +591,7 @@ const unpublishCollection = async (
 ) => {
   try {
     const { collectionId } = req.params;
-    const  tenantId  = req.body;
+    const  {tenantId}  = req.user;
 
     const collection =
       await prisma.collection.findFirst({
