@@ -270,6 +270,19 @@ const adminRegister = async (req, res) => {
             endDate,
           },
         });
+
+      const usage = await prisma.usage.create({
+        data: {
+          tenantId:tenant.tenantId,
+          storageUsedMB: 0,
+          getRequestsUsed: 0,
+          writeRequestsUsed: 0,
+          apiKeysUsed: 0,
+          projectsUsed: 0,
+          collectionsUsed: 0,
+          teamMembersUsed: 0,
+        },
+      })  
       
       const result = {
         tenant,
@@ -800,7 +813,7 @@ const login = async (req, res) => {
           user.name,
           emailVerificationOtp
         );
-        
+
       return res.status(403).json({
         success: false,
         message: "Please verify your email first",

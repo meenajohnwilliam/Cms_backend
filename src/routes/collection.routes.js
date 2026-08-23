@@ -12,11 +12,11 @@ const {
   unpublishCollection,
 } = require("../controllers/collection.controller");
 
-// const authMiddleware =
-//   require("../middleware/auth.middleware");
+const authMiddleware =
+  require("../middleware/auth.middleware");
 
-// const roleMiddleware =
-//   require("../middleware/role.middleware");
+const roleMiddleware =
+  require("../middleware/role.middleware");
 
 const router = express.Router();
 
@@ -26,8 +26,8 @@ const router = express.Router();
 
 router.post(
   "/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   createCollection
 );
 
@@ -37,8 +37,8 @@ router.post(
 
 router.get(
   "/projects/:projectId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getCollections
 );
 
@@ -48,8 +48,8 @@ router.get(
 
 router.get(
   "/:collectionId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getCollection
 );
 
@@ -59,8 +59,8 @@ router.get(
 
 router.put(
   "/:collectionId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   updateCollection
 );
 
@@ -70,8 +70,8 @@ router.put(
 
 router.delete(
   "/:collectionId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   deleteCollection
 );
 
@@ -81,8 +81,8 @@ router.delete(
 
 router.put(
   "/:collectionId/publish",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   publishCollection
 );
 
@@ -92,8 +92,8 @@ router.put(
 
 router.put(
   "/:collectionId/unpublish",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   unpublishCollection
 );
 

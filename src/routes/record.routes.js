@@ -11,11 +11,8 @@ const {
   deleteRecord,
 } = require("../controllers/record.controller");
 
-const authMiddleware =
-  require("../middleware/auth.middleware");
-
-const roleMiddleware =
-  require("../middleware/role.middleware");
+const authMiddleware = require("../middleware/auth.middleware");
+const roleMiddleware = require("../middleware/role.middleware");
 
 const router = express.Router();
 

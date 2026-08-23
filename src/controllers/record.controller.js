@@ -259,6 +259,8 @@ const createRecord = async (req, res) => {
         continue;
       }
 
+      
+
       await prisma.media.create({
         data: {
           recordId: record.recordId,

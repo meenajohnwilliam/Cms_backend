@@ -8,13 +8,12 @@ const {
   getProject,
   updateProject,
   deleteProject,
-} = require("../controllers//project.controller");
+} = require("../controllers/project.controller");
 
-const authMiddleware =
-  require("../middleware/auth.middleware");
+const authMiddleware = require("../middleware/auth.middleware");
 
-const roleMiddleware =
-  require("../middleware/role.middleware");
+const roleMiddleware = require("../middleware/role.middleware");
+
 
 const router = express.Router();
 

@@ -68,6 +68,7 @@ model Tenant {
   subscription   Subscription[]
   payments        Payment[]
   projects        Project[]
+  usage           Usage?
 
 }
 
@@ -428,4 +429,25 @@ model Media {
 
   @@index([recordId])
   @@index([fieldId])
+}
+
+
+model Usage {
+  usageId          String   @id @default(cuid())
+
+  tenantId         String   @unique
+  tenant           Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  storageUsedMB    Int      @default(0)
+
+  getRequestsUsed  Int      @default(0)
+  writeRequestsUsed Int     @default(0)
+
+  apiKeysUsed      Int      @default(0)
+  projectsUsed     Int      @default(0)
+  collectionsUsed  Int      @default(0)
+  teamMembersUsed  Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }

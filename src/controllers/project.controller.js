@@ -54,21 +54,35 @@ const createProject = async (req, res) => {
       });
     }
 
-    const projectCount =
-      await prisma.project.count({
-        where: {
-          tenantId,
-          isActive: true,
-        },
-      });
+    
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
 
-    if (
-      subscription.plan.projectLimit !== -1 &&
-      projectCount >= subscription.plan.projectLimit
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
+    const projectLimit = subscription.plan.projectLimit;
+
+     // -1 = Unlimited
+
+     if (
+      projectLimit !== -1 &&
+      usage.projectsUsed >= projectLimit
     ) {
       return res.status(403).json({
         success: false,
         message: "Project limit reached",
+        usage: {
+          used: usage.projectsUsed,
+          limit: projectLimit
+        }
       });
     }
 
@@ -91,21 +105,43 @@ const createProject = async (req, res) => {
       });
     }
 
-    const project =
-      await prisma.project.create({
+    const project = await prisma.project.create({
         data: {
           tenantId,
           name: name.trim(),
           slug,
-          description:
-            description?.trim() || null,
+          description: description?.trim() || null,
         },
       });
+
+      const updatedUsage = await prisma.usage.update({
+        where: {
+          tenantId,
+        },
+        data: {
+          projectsUsed: {
+            increment: 1,
+          },
+        },
+      });
+
+      const remaining =
+      projectLimit === -1
+        ? -1
+        : Math.max(
+            projectLimit - updatedUsage.projectsUsed,
+            0
+          );
 
     return res.status(201).json({
       success: true,
       message: "Project created successfully",
       project,
+      usage: {
+        projectsUsed: updatedUsage.projectsUsed,
+        projectLimit,
+        remaining,
+      },
     });
   } catch (error) {
     console.error(
@@ -330,16 +366,30 @@ const updateProject = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const  {tenantId }  = req.user;
+    const { tenantId } = req.user;
 
-    const project =
-      await prisma.project.findFirst({
-        where: {
-          projectId,
-          tenantId,
-          isActive: true,
-        },
+    // ========================================================
+    // CHECK TENANT
+    // ========================================================
+
+    if (!tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: "Tenant not found",
       });
+    }
+
+    // ========================================================
+    // FIND ACTIVE PROJECT
+    // ========================================================
+
+    const project = await prisma.project.findFirst({
+      where: {
+        projectId,
+        tenantId,
+        isActive: true,
+      },
+    });
 
     if (!project) {
       return res.status(404).json({
@@ -347,6 +397,10 @@ const deleteProject = async (req, res) => {
         message: "Project not found",
       });
     }
+
+    // ========================================================
+    // SOFT DELETE PROJECT
+    // ========================================================
 
     await prisma.project.update({
       where: {
@@ -356,6 +410,25 @@ const deleteProject = async (req, res) => {
         isActive: false,
       },
     });
+
+    // ========================================================
+    // DECREASE PROJECT USAGE
+    // ========================================================
+
+    await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        projectsUsed: {
+          decrement: 1,
+        },
+      },
+    });
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
 
     return res.status(200).json({
       success: true,

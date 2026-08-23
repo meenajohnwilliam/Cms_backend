@@ -17,7 +17,8 @@ const generateSlug = (name) => {
 const createCollection = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { name ,tenantId} = req.body;
+    const { name } = req.body;
+    const { tenantId } = req.params
   
 
     if (!tenantId) {
@@ -78,31 +79,42 @@ const createCollection = async (req, res) => {
       });
     }
 
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
     // ========================================================
     // CHECK COLLECTION LIMIT
     // ========================================================
 
-    const collectionCount =
-      await prisma.collection.count({
-        where: {
-          project: {
-            tenantId,
-            isActive: true,
-          },
-        },
-      });
+    const collectionLimit =
+      subscription.plan.collectionLimit;
+
+    // -1 = Unlimited
 
     if (
-      subscription.plan.collectionLimit !== -1 &&
-      collectionCount >=
-        subscription.plan.collectionLimit
+      collectionLimit !== -1 &&
+      usage.collectionsUsed >= collectionLimit
     ) {
       return res.status(403).json({
         success: false,
         message: "Collection limit reached",
+        usage: {
+          used: usage.collectionsUsed,
+          limit: collectionLimit,
+        },
       });
     }
-
     // ========================================================
     // GENERATE SLUG
     // ========================================================
@@ -141,21 +153,36 @@ const createCollection = async (req, res) => {
     // CREATE COLLECTION
     // ========================================================
 
-    const collection =
-      await prisma.collection.create({
+    const collection = await prisma.collection.create({
         data: {
           projectId,
           name: name.trim(),
           slug,
-          
           status: "DRAFT",
         },
       });
+
+
+    const updatedUsage = await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        collectionsUsed: {
+          increment: 1,
+        },
+      },
+    });
+
 
     return res.status(201).json({
       success: true,
       message: "Collection created successfully",
       collection,
+      usage: {
+        collectionsUsed: updatedUsage.collectionsUsed,
+        collectionLimit,
+      },
     });
   } catch (error) {
     console.error(
@@ -177,7 +204,7 @@ const createCollection = async (req, res) => {
 const getCollections = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const  tenantId  = req.body;
+    const  {tenantId}  = req.user;
 
     // ========================================================
     // CHECK PROJECT
@@ -249,7 +276,7 @@ const getCollections = async (req, res) => {
 const getCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const  tenantId  = req.body;
+    const  {tenantId}  = req.user;
 
     const collection =
       await prisma.collection.findFirst({
@@ -305,7 +332,8 @@ const getCollection = async (req, res) => {
 const updateCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { name,tenantId } = req.body;
+    const { name } = req.body;
+    const {tenantId} = req.user
  
 
     if (
@@ -420,7 +448,15 @@ const updateCollection = async (req, res) => {
 const deleteCollection = async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const  tenantId  = req.body;
+    const  {tenantId}  = req.user;
+
+    if (!tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
 
     const collection =
       await prisma.collection.findFirst({
@@ -443,6 +479,17 @@ const deleteCollection = async (req, res) => {
     await prisma.collection.delete({
       where: {
         collectionId,
+      },
+    });
+
+    await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        collectionsUsed: {
+          decrement: 1,
+        },
       },
     });
 
@@ -474,7 +521,7 @@ const publishCollection = async (
 ) => {
   try {
     const { collectionId } = req.params;
-    const  tenantId  = req.body;
+    const  {tenantId}  = req.user;
 
     const collection =
       await prisma.collection.findFirst({
