@@ -17,6 +17,7 @@ const clientUserRoutes = require("./src/routes/clientUser.routes");
 const formRoutes = require("./src/routes/form.routes");
 const formFieldRoutes = require("./src/routes/formField.routes");
 const formSubmissionRoutes = require("./src/routes/formSubmission.routes");
+const usageRoutes = require("./src/routes/usage.routes") 
 
 
 app.use(
@@ -55,6 +56,8 @@ app.use("/api/v1/public",publicApiRoutes);
 app.use("/api/v1/admin",clientUserRoutes);
 app.use("/api/v1/forms",formRoutes);
 app.use("/api/v1/forms/fields",formFieldRoutes);
+// Usage routes
+app.use("/api/v1/usage", usageRoutes);
 
 app.use("/api/v1/forms/submissions",formSubmissionRoutes);
 
