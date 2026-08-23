@@ -98,16 +98,13 @@ const getUsage = async (req, res) => {
         storageLimitBytes > storageUsedBytes
           ? storageLimitBytes - storageUsedBytes
           : 0n;
-
-      if (storageLimitBytes > 0n) {
-        storagePercentage = Number(
-          (
-            (Number(storageUsedBytes) /
-              Number(storageLimitBytes)) *
-            100
-          ).toFixed(2)
-        );
-      }
+          if (storageLimitBytes > 0n) {
+            storagePercentage =
+              Number(
+                (storageUsedBytes * 10000n) /
+                storageLimitBytes
+              ) / 100;
+          }
     }
 
     // ========================================================
