@@ -28,7 +28,7 @@ router.post(
 router.get(
   "/collections/:collectionId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getFields
 );
 
