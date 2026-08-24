@@ -38,7 +38,7 @@ router.post(
 router.get(
   "/projects/:projectId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getCollections
 );
 

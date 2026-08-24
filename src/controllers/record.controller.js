@@ -477,6 +477,65 @@ const getRecords = async (req, res) => {
       });
     }
 
+    const subscription =
+    await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+        status: "ACTIVE",
+      },
+      include: {
+        plan: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+  if (!subscription) {
+    return res.status(403).json({
+      success: false,
+      message: "Active subscription required",
+    });
+  }
+
+
+      // ========================================================
+    // GET USAGE
+    // ========================================================
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
+    const getRequestsLimit =
+    subscription.plan.getRequestsLimit;
+
+  // -1 = Unlimited
+
+  if (
+    getRequestsLimit !== -1 &&
+    usage.getRequestsUsed >= getRequestsLimit
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "GET request limit reached",
+      usage: {
+        used: usage.getRequestsUsed,
+        limit: getRequestsLimit,
+      },
+    });
+  }
+
+
     const records = await prisma.record.findMany({
       where: {
         collectionId,
@@ -486,6 +545,21 @@ const getRecords = async (req, res) => {
       },
       orderBy: {
         createdAt: "desc",
+      },
+    });
+
+        // ========================================================
+    // INCREASE GET REQUEST USAGE
+    // ========================================================
+
+    await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        getRequestsUsed: {
+          increment: 1,
+        },
       },
     });
 
@@ -545,6 +619,74 @@ const getRecord = async (req, res) => {
         message: "Record not found",
       });
     }
+
+    const subscription =
+    await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+        status: "ACTIVE",
+      },
+      include: {
+        plan: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+  if (!subscription) {
+    return res.status(403).json({
+      success: false,
+      message: "Active subscription required",
+    });
+  }
+
+  const usage = await prisma.usage.findUnique({
+    where: {
+      tenantId,
+    },
+  });
+
+  if (!usage) {
+    return res.status(500).json({
+      success: false,
+      message: "Tenant usage record not found",
+    });
+  }
+
+
+  const getRequestsLimit =
+  subscription.plan.getRequestsLimit;
+
+// -1 = Unlimited
+
+if (
+  getRequestsLimit !== -1 &&
+  usage.getRequestsUsed >= getRequestsLimit
+) {
+  return res.status(403).json({
+    success: false,
+    message: "GET request limit reached",
+    usage: {
+      used: usage.getRequestsUsed,
+      limit: getRequestsLimit,
+    },
+  });
+}
+
+
+await prisma.usage.update({
+  where: {
+    tenantId,
+  },
+  data: {
+    getRequestsUsed: {
+      increment: 1,
+    },
+  },
+});
+
+
 
     return res.status(200).json({
       success: true,

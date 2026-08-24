@@ -1,5 +1,4 @@
 // src/controllers/publicApi.controller.js
-
 const crypto = require("crypto");
 const prisma = require("../config/prisma");
 
@@ -23,8 +22,7 @@ const getPublicCollection = async (req, res) => {
   try {
     const { projectSlug, collectionSlug } = req.params;
 
-    const apiKey =
-      req.headers["x-api-key"];
+    const apiKey = req.headers["x-api-key"];
 
     // ========================================================
     // CHECK API KEY
@@ -244,7 +242,6 @@ const getPublicCollection = async (req, res) => {
   }
 };
 
-
 // YES — KEEP YOUR EXISTING getPublicCollection()
 // It is already for:
 // GET collection data
@@ -459,7 +456,6 @@ const getPublicForm = async (req, res) => {
       });
     }
   };
-  
   
   // ============================================================
   // PUBLIC SUBMIT FORM
