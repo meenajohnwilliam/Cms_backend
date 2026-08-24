@@ -49,7 +49,7 @@ router.get(
 router.get(
   "/:collectionId",
   authMiddleware,
-  roleMiddleware("ADMIN"),
+  roleMiddleware("ADMIN","USER"),
   getCollection
 );
 
