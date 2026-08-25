@@ -247,17 +247,21 @@ const getPlans = async (req, res) => {
           },
         ],
       });
-
+      const formattedPlans = plans.map((plan) => ({
+        ...plan,
+  
+        // BigInt -> MB for API response
+        storageLimit:
+          plan.storageLimit === -1n
+            ? -1
+            : Number(plan.storageLimit) /
+              (1024 * 1024),
+      }));
+  
       return res.status(200).json({
         success: true,
-        count: plans.length,
-      
-        plans: plans.map((plan) => ({
-          ...plan,
-      
-          storageLimit:
-            bytesToMB(plan.storageLimit),
-        })),
+        count: formattedPlans.length,
+        plans: formattedPlans,
       });
   } catch (error) {
     console.error(
@@ -758,14 +762,14 @@ const updatePlan = async (req, res) => {
         success: true,
       
         message:
-          "New plan created and old plan deactivated",
+          "Plan updated successfully",
       
         plan: {
-          ...newPlan,
+          ...plan,
       
           storageLimit:
             bytesToMB(
-              newPlan.storageLimit
+              plan.storageLimit
             ),
         },
       });
@@ -871,8 +875,18 @@ const deletePlan = async (req, res) => {
   
       return res.status(200).json({
         success: true,
+      
         message:
-          "Plan deleted successfully",
+          "Plan is already used. Plan has been deactivated.",
+      
+        plan: {
+          ...deactivatedPlan,
+      
+          storageLimit:
+            bytesToMB(
+              deactivatedPlan.storageLimit
+            ),
+        },
       });
     } catch (error) {
       console.error(
