@@ -644,8 +644,7 @@ const getPublicForm = async (req, res) => {
       // FIND API KEY
       // ========================================================
   
-      const apiKeyRecord =
-        await prisma.apiKey.findUnique({
+      const apiKeyRecord = await prisma.apiKey.findUnique({
           where: {
             keyHash,
           },
@@ -673,15 +672,12 @@ const getPublicForm = async (req, res) => {
       // CHECK PROJECT
       // ========================================================
   
-      const project =
-        await prisma.project.findFirst({
+      const project = await prisma.project.findFirst({
           where: {
             projectId:
               apiKeyRecord.projectId,
-  
-            slug: projectSlug,
-  
-            isActive: true,
+              slug: projectSlug,
+              isActive: true,
           },
         });
   
@@ -700,10 +696,8 @@ const getPublicForm = async (req, res) => {
         await prisma.subscription.findFirst({
           where: {
             tenantId: project.tenantId,
-  
             status: "ACTIVE",
           },
-  
           orderBy: {
             createdAt: "desc",
           },
@@ -721,14 +715,11 @@ const getPublicForm = async (req, res) => {
       // FIND PUBLISHED FORM
       // ========================================================
   
-      const form =
-        await prisma.form.findFirst({
+      const form = await prisma.form.findFirst({
           where: {
             projectId:
-              project.projectId,
-  
+            project.projectId,
             slug: formSlug,
-  
             status: "PUBLISHED",
           },
   
@@ -758,7 +749,6 @@ const getPublicForm = async (req, res) => {
           apiKeyId:
             apiKeyRecord.apiKeyId,
         },
-  
         data: {
           lastUsedAt: new Date(),
         },
@@ -771,19 +761,19 @@ const getPublicForm = async (req, res) => {
       return res.status(200).json({
         success: true,
   
-        project: {
-          projectId: project.projectId,
-          name: project.name,
-          slug: project.slug,
-        },
+        // project: {
+        //   projectId: project.projectId,
+        //   name: project.name,
+        //   slug: project.slug,
+        // },
   
-        form: {
-          formId: form.formId,
-          name: form.name,
-          slug: form.slug,
-          description: form.description,
-          status: form.status,
-        },
+        // form: {
+        //   formId: form.formId,
+        //   name: form.name,
+        //   slug: form.slug,
+        //   description: form.description,
+        //   status: form.status,
+        // },
   
         fields: form.fields.map(
           (field) => ({
@@ -794,8 +784,7 @@ const getPublicForm = async (req, res) => {
             required: field.required,
             placeholder: field.placeholder,
             options: field.options,
-            displayOrder:
-              field.displayOrder,
+            displayOrder: field.displayOrder,
           })
         ),
       });
@@ -1130,8 +1119,7 @@ const getPublicForm = async (req, res) => {
     // CHECK PROJECT
     // ========================================================
 
-    const project =
-      await prisma.project.findFirst({
+    const project =  await prisma.project.findFirst({
         where: {
           projectId: apiKeyRecord.projectId,
           slug: projectSlug,
@@ -1150,13 +1138,14 @@ const getPublicForm = async (req, res) => {
     // CHECK SUBSCRIPTION
     // ========================================================
 
-    const subscription =
-      await prisma.subscription.findFirst({
+    const subscription = await prisma.subscription.findFirst({
         where: {
           tenantId: project.tenantId,
           status: "ACTIVE",
         },
-
+        include: {
+          plan: true,
+        },
         orderBy: {
           createdAt: "desc",
         },
@@ -1167,6 +1156,47 @@ const getPublicForm = async (req, res) => {
         success: false,
         message:
           "Subscription inactive. Please make payment to use the API.",
+      });
+    }
+
+        // ========================================================
+    // GET TENANT USAGE
+    // ========================================================
+
+    const usage = await prisma.usage.findUnique({
+        where: {
+          tenantId: project.tenantId,
+        },
+      });
+
+    if (!usage) {
+      return res.status(500).json({
+        success: false,
+        message: "Tenant usage record not found",
+      });
+    }
+
+      // ========================================================
+    // CHECK WRITE REQUEST LIMIT
+    // ========================================================
+
+    const writeRequestsLimit =
+      subscription.plan.writeRequestsLimit;
+
+    // -1 = Unlimited
+
+    if (
+      writeRequestsLimit !== -1 &&
+      usage.writeRequestsUsed >=
+        writeRequestsLimit
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Write request limit reached",
+        usage: {
+          used: usage.writeRequestsUsed,
+          limit: writeRequestsLimit,
+        },
       });
     }
 
@@ -1204,6 +1234,7 @@ const getPublicForm = async (req, res) => {
 
     let data = req.body;
 
+    const files = req.files || [];
     // ========================================================
     // CHECK REQUIRED FIELDS
     // ========================================================
@@ -1220,7 +1251,7 @@ const getPublicForm = async (req, res) => {
         field.type === "FILE"
       ) {
         const uploadedFile =
-          (req.files || []).find(
+         files.find(
             (file) =>
               file.fieldname === field.name
           );
@@ -1254,6 +1285,51 @@ const getPublicForm = async (req, res) => {
       }
     }
 
+     // ========================================================
+    // CALCULATE UPLOAD STORAGE
+    // ========================================================
+
+    const uploadedBytes = files.reduce(
+      (total, file) => {
+        return total + BigInt(file.size || 0);
+      },
+      0n
+    );
+
+    // ========================================================
+    // CHECK STORAGE LIMIT
+    // ========================================================
+
+    const storageLimit =
+      subscription.plan.storageLimit;
+
+    // -1 = Unlimited
+
+    if (storageLimit !== -1) {
+      const storageLimitBytes =
+        BigInt(storageLimit) *
+        1024n *
+        1024n *
+        1024n;
+
+      if (
+        usage.storageUsedBytes +
+          uploadedBytes >
+        storageLimitBytes
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Storage limit reached",
+          usage: {
+            usedBytes:
+              usage.storageUsedBytes.toString(),
+            limitGB: storageLimit,
+          },
+        });
+      }
+    }
+
+
     // ========================================================
     // SAVE SUBMISSION
     // ========================================================
@@ -1270,7 +1346,7 @@ const getPublicForm = async (req, res) => {
     // SAVE UPLOADED FILES
     // ========================================================
 
-    const files = req.files || [];
+ 
 
     for (const file of files) {
 
@@ -1315,6 +1391,40 @@ const getPublicForm = async (req, res) => {
         },
       });
     }
+
+    // ========================================================
+    // INCREASE WRITE REQUEST USAGE
+    // ========================================================
+
+    await prisma.usage.update({
+      where: {
+        tenantId: project.tenantId,
+      },
+      data: {
+        writeRequestsUsed: {
+          increment: 1,
+        },
+      },
+    });
+
+    // ========================================================
+    // INCREASE STORAGE USAGE
+    // ========================================================
+
+    if (uploadedBytes > 0n) {
+      await prisma.usage.update({
+        where: {
+          tenantId: project.tenantId,
+        },
+        data: {
+          storageUsedBytes: {
+            increment: uploadedBytes,
+          },
+        },
+      });
+    }
+
+
 
     // ========================================================
     // UPDATE API KEY LAST USED
