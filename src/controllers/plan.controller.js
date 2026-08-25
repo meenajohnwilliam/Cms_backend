@@ -760,17 +760,17 @@ const updatePlan = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-      
         message:
-          "Plan updated successfully",
+          "New plan created and old plan deactivated",
       
         plan: {
-          ...plan,
+          ...newPlan,
       
           storageLimit:
-            bytesToMB(
-              plan.storageLimit
-            ),
+            newPlan.storageLimit === -1n
+              ? -1
+              : Number(newPlan.storageLimit) /
+                (1024 * 1024),
         },
       });
   } catch (error) {
@@ -883,9 +883,11 @@ const deletePlan = async (req, res) => {
           ...deactivatedPlan,
       
           storageLimit:
-            bytesToMB(
-              deactivatedPlan.storageLimit
-            ),
+            deactivatedPlan.storageLimit === -1n
+              ? -1
+              : Number(
+                  deactivatedPlan.storageLimit
+                ) / (1024 * 1024),
         },
       });
     } catch (error) {
