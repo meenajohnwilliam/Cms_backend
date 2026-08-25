@@ -564,12 +564,20 @@ const updatePlan = async (req, res) => {
           isActive: false,
         },
       });
-
       return res.status(200).json({
         success: true,
         message:
           "New plan created and old plan deactivated",
-        plan: newPlan,
+      
+        plan: {
+          ...newPlan,
+      
+          storageLimit:
+            newPlan.storageLimit === -1n
+              ? -1
+              : Number(newPlan.storageLimit) /
+                (1024 * 1024),
+        },
       });
     }
 
@@ -767,7 +775,7 @@ const updatePlan = async (req, res) => {
           ...plan,
       
           storageLimit:
-            newPlan.storageLimit === -1n
+            plan.storageLimit === -1n
               ? -1
               : Number(plan.storageLimit) /
                 (1024 * 1024),
