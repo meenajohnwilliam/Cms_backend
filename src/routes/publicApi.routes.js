@@ -5,9 +5,12 @@ const upload = require("../config/upload")
 
 const {
   getPublicCollection,
+  getPublicRecord,
   getPublicForm,
   submitPublicForm,
+  getPublicRecord
 } = require("../controllers/publicApi.controller");
+
 
 const router = express.Router();
 
@@ -18,6 +21,25 @@ const router = express.Router();
 router.get(
   "/:projectSlug/:collectionSlug",
   getPublicCollection
+);
+
+router.get(
+  "/:projectSlug/:collectionSlug/:recordId",
+  getPublicRecord
+);
+
+// ============================================================
+// PUBLIC GET SINGLE RECORD API
+// ============================================================
+// Get one record from a published collection
+//
+// Example:
+// GET /api/v1/my-project/blog/recordId
+// ============================================================
+
+router.get(
+  "/:projectSlug/:collectionSlug/:recordId",
+  getPublicRecord
 );
 
 // ============================================================
