@@ -3,6 +3,22 @@
 const prisma = require("../config/prisma");
 const { createRazorpayPlan } = require("../utils/services/razorpay.service");
 
+const mbToBytes = (mb) => {
+  if (Number(mb) === -1) {
+    return -1n;
+  }
+
+  return BigInt(mb) * 1024n * 1024n;
+};
+
+const bytesToMB = (bytes) => {
+  if (bytes === -1n) {
+    return -1;
+  }
+
+  return Number(bytes) / (1024 * 1024);
+};
+
 
 // ==========================================
 // CREATE PLAN
@@ -155,7 +171,7 @@ const createPlan = async (req, res) => {
             Number(teamMemberLimit),
 
           storageLimit:
-            Number(storageLimit),
+          mbToBytes(storageLimit),
 
           getRequestsLimit:
             Number(getRequestsLimit),
@@ -192,7 +208,13 @@ const createPlan = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Plan created successfully",
-      plan,
+    
+      plan: {
+        ...plan,
+    
+        storageLimit:
+          bytesToMB(plan.storageLimit),
+      },
     });
   } catch (error) {
     console.error(
@@ -226,11 +248,17 @@ const getPlans = async (req, res) => {
         ],
       });
 
-    return res.status(200).json({
-      success: true,
-      count: plans.length,
-      plans,
-    });
+      return res.status(200).json({
+        success: true,
+        count: plans.length,
+      
+        plans: plans.map((plan) => ({
+          ...plan,
+      
+          storageLimit:
+            bytesToMB(plan.storageLimit),
+        })),
+      });
   } catch (error) {
     console.error(
       "Get Plans Error:",
@@ -269,7 +297,13 @@ const getPlan = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      plan,
+    
+      plan: {
+        ...plan,
+    
+        storageLimit:
+          bytesToMB(plan.storageLimit),
+      },
     });
   } catch (error) {
     console.error(
@@ -465,10 +499,10 @@ const updatePlan = async (req, res) => {
                 ? Number(teamMemberLimit)
                 : existingPlan.teamMemberLimit,
 
-            storageLimit:
-              storageLimit !== undefined
-                ? Number(storageLimit)
-                : existingPlan.storageLimit,
+                storageLimit:
+                storageLimit !== undefined
+                  ? mbToBytes(storageLimit)
+                  : existingPlan.storageLimit,
 
             getRequestsLimit:
               getRequestsLimit !== undefined
@@ -670,7 +704,7 @@ const updatePlan = async (req, res) => {
 
           ...(storageLimit !== undefined && {
             storageLimit:
-              Number(storageLimit),
+              mbToBytes(storageLimit),
           }),
 
           ...(getRequestsLimit !== undefined && {
@@ -720,12 +754,21 @@ const updatePlan = async (req, res) => {
         },
       });
 
-    return res.status(200).json({
-      success: true,
-      message:
-        "Plan updated successfully",
-      plan,
-    });
+      return res.status(200).json({
+        success: true,
+      
+        message:
+          "New plan created and old plan deactivated",
+      
+        plan: {
+          ...newPlan,
+      
+          storageLimit:
+            bytesToMB(
+              newPlan.storageLimit
+            ),
+        },
+      });
   } catch (error) {
     console.error(
       "Update Plan Error:",
