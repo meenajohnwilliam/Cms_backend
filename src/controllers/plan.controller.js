@@ -764,12 +764,12 @@ const updatePlan = async (req, res) => {
           "New plan created and old plan deactivated",
       
         plan: {
-          ...newPlan,
+          ...plan,
       
           storageLimit:
             newPlan.storageLimit === -1n
               ? -1
-              : Number(newPlan.storageLimit) /
+              : Number(plan.storageLimit) /
                 (1024 * 1024),
         },
       });
@@ -853,8 +853,16 @@ const deletePlan = async (req, res) => {
           success: true,
           message:
             "Plan is already used. Plan has been deactivated.",
-          plan:
-            deactivatedPlan,
+            plan: {
+              ...deactivatedPlan,
+    
+              storageLimit:
+                deactivatedPlan.storageLimit === -1n
+                  ? -1
+                  : Number(
+                      deactivatedPlan.storageLimit
+                    ) / (1024 * 1024),
+            },
         });
       }
   
@@ -875,20 +883,7 @@ const deletePlan = async (req, res) => {
   
       return res.status(200).json({
         success: true,
-      
-        message:
-          "Plan is already used. Plan has been deactivated.",
-      
-        plan: {
-          ...deactivatedPlan,
-      
-          storageLimit:
-            deactivatedPlan.storageLimit === -1n
-              ? -1
-              : Number(
-                  deactivatedPlan.storageLimit
-                ) / (1024 * 1024),
-        },
+        message: "Plan deleted successfully",
       });
     } catch (error) {
       console.error(
