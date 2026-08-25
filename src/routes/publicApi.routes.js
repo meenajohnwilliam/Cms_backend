@@ -8,7 +8,6 @@ const {
   getPublicRecord,
   getPublicForm,
   submitPublicForm,
-  getPublicRecord
 } = require("../controllers/publicApi.controller");
 
 
@@ -23,10 +22,7 @@ router.get(
   getPublicCollection
 );
 
-router.get(
-  "/:projectSlug/:collectionSlug/:recordId",
-  getPublicRecord
-);
+
 
 // ============================================================
 // PUBLIC GET SINGLE RECORD API

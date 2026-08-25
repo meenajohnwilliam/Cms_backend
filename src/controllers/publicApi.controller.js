@@ -265,7 +265,6 @@ const getPublicCollection = async (req, res) => {
       // ),
 
       count: records.length,
-
       data: records,
     });
   } catch (error) {
