@@ -80,9 +80,12 @@ const getCurrentSubscription = async (req, res) => {
 
           teamMemberLimit:
             subscription.plan.teamMemberLimit,
-
-          storageLimit:
-            subscription.plan.storageLimit,
+            storageLimit:
+            subscription.plan.storageLimit === -1n
+              ? -1
+              : Number(
+                  subscription.plan.storageLimit
+                ) / (1024 * 1024),
 
           getRequestsLimit:
             subscription.plan.getRequestsLimit,
@@ -133,11 +136,22 @@ const getAvailablePlans = async (req, res) => {
         },
       });
 
-    return res.status(200).json({
-      success: true,
-      count: plans.length,
-      plans,
-    });
+      const formattedPlans = plans.map((plan) => ({
+        ...plan,
+      
+        storageLimit:
+          plan.storageLimit === -1n
+            ? -1
+            : Number(
+                plan.storageLimit
+              ) / (1024 * 1024),
+      }));
+      
+      return res.status(200).json({
+        success: true,
+        count: formattedPlans.length,
+        plans: formattedPlans,
+      });
   } catch (error) {
     console.error(
       "Get Available Plans Error:",

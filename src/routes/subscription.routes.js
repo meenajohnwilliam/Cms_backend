@@ -8,22 +8,22 @@ const {
   upgradeSubscription,
 } = require("../controllers/subscription.controller");
 
-// const authMiddleware = require("../middleware/auth.middleware");
-// const roleMiddleware = require("../middleware/role.middleware");
+const authMiddleware = require("../middleware/auth.middleware");
+const roleMiddleware = require("../middleware/role.middleware");
 
 const router = express.Router();
 
 router.get(
   "/current/:tenantId",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getCurrentSubscription
 );
 
 router.post(
     "/upgrade",
-    // authMiddleware,
-    // roleMiddleware("ADMIN"),
+    authMiddleware,
+    roleMiddleware("ADMIN"),
     upgradeSubscription
   );
 
@@ -40,8 +40,8 @@ router.post(
 
 router.get(
   "/plans",
-//   authMiddleware,
-//   roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getAvailablePlans
 );
 
