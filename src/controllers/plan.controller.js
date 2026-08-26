@@ -238,16 +238,6 @@ const getPlans = async (req, res) => {
   try {
     const plans =
       await prisma.plan.findMany({
-        where:{
-           isActive:true,
-          // YEARLY:
-          // Remove plans where yearlyPrice = "0"
-          ...(billingCycle === "YEARLY" && {
-            NOT: {
-              yearlyPrice: "0",
-            },
-          }),
-        },
         orderBy: [
           {
             displayOrder: "asc",

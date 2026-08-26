@@ -128,20 +128,9 @@ const getAvailablePlans = async (req, res) => {
   try {
     const plans =
       await prisma.plan.findMany({
-          where: {
-            isActive: true,
-  
-            // ========================================
-            // YEARLY
-            // Do NOT return plans with yearlyPrice = 0
-            // ========================================
-  
-            ...(billingCycle === "YEARLY" && {
-              NOT: {
-                yearlyPrice: "0",
-              },
-            }),
-          },
+        where: {
+          isActive: true,
+        },
         orderBy: {
           displayOrder: "asc",
         },
