@@ -238,6 +238,7 @@ const getPlans = async (req, res) => {
   try {
     const plans =
       await prisma.plan.findMany({
+        
         orderBy: [
           {
             displayOrder: "asc",
