@@ -438,9 +438,9 @@ model Usage {
   tenantId         String   @unique
   tenant           Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
 
-  storageUsedBytes    BigInt         @default(0)
+  storageUsedBytes  BigInt  @default(0)
 
-  getRequestsUsed  Int      @default(0)
+  getRequestsUsed   Int     @default(0)
   writeRequestsUsed Int     @default(0)
 
   apiKeysUsed      Int      @default(0)

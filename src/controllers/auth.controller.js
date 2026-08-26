@@ -271,18 +271,11 @@ const adminRegister = async (req, res) => {
           },
         });
 
-      const usage = await prisma.usage.create({
-        data: {
-          tenantId:tenant.tenantId,
-          storageUsedMB: 0,
-          getRequestsUsed: 0,
-          writeRequestsUsed: 0,
-          apiKeysUsed: 0,
-          projectsUsed: 0,
-          collectionsUsed: 0,
-          teamMembersUsed: 0,
-        },
-      })  
+        const usage = await prisma.usage.create({
+          data: {
+            tenantId: tenant.tenantId,
+          },
+        });
       
       const result = {
         tenant,
