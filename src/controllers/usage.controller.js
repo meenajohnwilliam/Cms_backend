@@ -42,19 +42,18 @@ const getUsage = async (req, res) => {
     // GET ACTIVE SUBSCRIPTION
     // ========================================================
 
-    const subscription =
-      await prisma.subscription.findFirst({
-        where: {
-          tenantId,
-          status: "ACTIVE",
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: {
-          plan: true,
-        },
-      });
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+        status: "ACTIVE",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        plan: true,
+      },
+    });
 
     if (!subscription) {
       return res.status(404).json({
@@ -73,38 +72,83 @@ const getUsage = async (req, res) => {
     // STORAGE
     // ========================================================
     //
-    // Usage.storageUsedBytes = actual bytes
+    // Database:
     //
-    // Plan.storageLimit = GB
+    // usage.storageUsedBytes -> BYTES
+    // plan.storageLimit      -> BYTES
     //
-    // -1 = Unlimited
+    // -1n = UNLIMITED
+    //
+    // Example:
+    //
+    // 104857600  = 100 MB
+    // 1073741824 = 1024 MB = 1 GB
+    // 5368709120 = 5120 MB = 5 GB
     // ========================================================
 
-    const storageUsedBytes =
-      usage.storageUsedBytes;
+    const storageUsedBytes = usage.storageUsedBytes;
+
+    const storageIsUnlimited =
+      plan.storageLimit === -1n;
 
     let storageLimitBytes = null;
     let storageRemainingBytes = null;
+
+    let storageUsedMB = null;
+    let storageLimitMB = null;
+    let storageRemainingMB = null;
+
     let storagePercentage = 0;
 
-    if (plan.storageLimit !== -1) {
-      storageLimitBytes =
-        BigInt(plan.storageLimit) *
-        1024n *
-        1024n *
-        1024n;
+    // ========================================================
+    // CALCULATE STORAGE
+    // ========================================================
 
+    if (!storageIsUnlimited) {
+      // IMPORTANT:
+      // storageLimit is ALREADY stored in bytes.
+      storageLimitBytes = plan.storageLimit;
+
+      // Remaining storage
       storageRemainingBytes =
         storageLimitBytes > storageUsedBytes
           ? storageLimitBytes - storageUsedBytes
           : 0n;
-          if (storageLimitBytes > 0n) {
-            storagePercentage =
-              Number(
-                (storageUsedBytes * 10000n) /
-                storageLimitBytes
-              ) / 100;
-          }
+
+      // ======================================================
+      // BYTES -> MB
+      // 1 MB = 1024 * 1024 bytes
+      // ======================================================
+
+      storageUsedMB =
+        Number(storageUsedBytes) /
+        (1024 * 1024);
+
+      storageLimitMB =
+        Number(storageLimitBytes) /
+        (1024 * 1024);
+
+      storageRemainingMB =
+        Number(storageRemainingBytes) /
+        (1024 * 1024);
+
+      // ======================================================
+      // STORAGE PERCENTAGE
+      // ======================================================
+
+      if (storageLimitBytes > 0n) {
+        storagePercentage =
+          Number(
+            (storageUsedBytes * 10000n) /
+              storageLimitBytes
+          ) / 100;
+
+        // Don't allow percentage above 100
+        storagePercentage = Math.min(
+          storagePercentage,
+          100
+        );
+      }
     }
 
     // ========================================================
@@ -154,32 +198,61 @@ const getUsage = async (req, res) => {
       },
 
       usage: {
+        // ====================================================
+        // STORAGE
+        // ====================================================
+
         storage: {
+          // Original database value
           usedBytes:
             storageUsedBytes.toString(),
 
+          // Original database limit
           limitBytes:
             storageLimitBytes !== null
               ? storageLimitBytes.toString()
               : null,
 
+          // Remaining bytes
           remainingBytes:
             storageRemainingBytes !== null
               ? storageRemainingBytes.toString()
               : null,
 
+          // Display values
+          usedMB:
+            storageUsedMB !== null
+              ? Number(storageUsedMB.toFixed(2))
+              : null,
+
+          limitMB:
+            storageLimitMB !== null
+              ? Number(storageLimitMB.toFixed(2))
+              : null,
+
+          remainingMB:
+            storageRemainingMB !== null
+              ? Number(storageRemainingMB.toFixed(2))
+              : null,
+
+          // Percentage
           percentage: storagePercentage,
 
-          unlimited:
-            plan.storageLimit === -1,
+          // Unlimited
+          unlimited: storageIsUnlimited,
         },
+
+        // ====================================================
+        // API
+        // ====================================================
 
         api: {
           get: {
             used: getRequestsUsed,
             limit: getRequestsLimit,
             remaining: getRequestsRemaining,
-            unlimited: getRequestsLimit === -1,
+            unlimited:
+              getRequestsLimit === -1,
           },
 
           write: {
@@ -191,17 +264,23 @@ const getUsage = async (req, res) => {
           },
         },
 
+        // ====================================================
+        // RESOURCES
+        // ====================================================
+
         resources: {
           apiKeys: {
             used: usage.apiKeysUsed,
             limit: plan.apiKeyLimit,
-            unlimited: plan.apiKeyLimit === -1,
+            unlimited:
+              plan.apiKeyLimit === -1,
           },
 
           projects: {
             used: usage.projectsUsed,
             limit: plan.projectLimit,
-            unlimited: plan.projectLimit === -1,
+            unlimited:
+              plan.projectLimit === -1,
           },
 
           collections: {
