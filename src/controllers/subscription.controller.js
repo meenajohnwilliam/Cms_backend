@@ -40,12 +40,10 @@ const getCurrentSubscription = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+
       subscription: {
         subscriptionId:
           subscription.subscriptionId,
-
-        billingCycle:
-          subscription.billingCycle,
 
         status:
           subscription.status,
@@ -56,6 +54,16 @@ const getCurrentSubscription = async (req, res) => {
         endDate:
           subscription.endDate,
 
+        razorpaySubscriptionId:
+          subscription.razorpaySubscriptionId,
+
+        razorpayCustomerId:
+          subscription.razorpayCustomerId,
+
+        // ==================================================
+        // PLAN
+        // ==================================================
+
         plan: {
           planId:
             subscription.plan.planId,
@@ -63,11 +71,19 @@ const getCurrentSubscription = async (req, res) => {
           name:
             subscription.plan.name,
 
-          monthlyPrice:
-            subscription.plan.monthlyPrice,
+          type:
+            subscription.plan.type,
 
-          yearlyPrice:
-            subscription.plan.yearlyPrice,
+          // IMPORTANT:
+          // billingCycle now comes from PLAN
+          billingCycle:
+            subscription.plan.billingCycle,
+
+          price:
+            subscription.plan.price,
+
+          razorpayPlanId:
+            subscription.plan.razorpayPlanId,
 
           projectLimit:
             subscription.plan.projectLimit,
@@ -80,7 +96,8 @@ const getCurrentSubscription = async (req, res) => {
 
           teamMemberLimit:
             subscription.plan.teamMemberLimit,
-            storageLimit:
+
+          storageLimit:
             subscription.plan.storageLimit === -1n
               ? -1
               : Number(
@@ -127,14 +144,21 @@ const getCurrentSubscription = async (req, res) => {
 const getAvailablePlans = async (req, res) => {
   try {
     const plans =
-      await prisma.plan.findMany({
-        where: {
-          isActive: true,
-        },
-        orderBy: {
+    await prisma.plan.findMany({
+      where: {
+        isActive: true,
+      },
+
+      orderBy: [
+        {
           displayOrder: "asc",
         },
-      });
+
+        {
+          createdAt: "desc",
+        },
+      ],
+    });
 
       const formattedPlans = plans.map((plan) => ({
         ...plan,
