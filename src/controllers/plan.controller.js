@@ -192,6 +192,7 @@ const createPlan = async (req, res) => {
           name: name.trim(),
 
           type,
+          billingCycle: billingCycle,
 
           price: String(price),
 

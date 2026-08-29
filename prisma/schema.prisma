@@ -135,9 +135,9 @@ model UserProjectAccess {
 model Plan {
   planId              String         @id @default(cuid())
   name                String         
-  type                PlanType       @default(PAID)
+  type                PlanType      
   billingCycle        BillingCycle
-  price               String         @default("0")
+  price               String         
   razorpayPlanId      String?        @unique
   usageResetCycle     UsageResetCycle @default(MONTHLY)
   projectLimit        Int
