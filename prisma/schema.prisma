@@ -35,6 +35,9 @@ enum SubscriptionStatus {
   PENDING
 }
 
+enum UsageResetCycle {
+  MONTHLY
+}
 
 enum BillingCycle {
   MONTHLY
@@ -132,11 +135,11 @@ model UserProjectAccess {
 model Plan {
   planId              String         @id @default(cuid())
   name                String         
-  type               PlanType       @default(PAID)
-  billingCycle        BillingCycle   @default(NONE)
+  type                PlanType       @default(PAID)
+  billingCycle        BillingCycle
   price               String         @default("0")
   razorpayPlanId      String?        @unique
-
+  usageResetCycle     UsageResetCycle @default(MONTHLY)
   projectLimit        Int
   collectionLimit     Int
   apiKeyLimit         Int
