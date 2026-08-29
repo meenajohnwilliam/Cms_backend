@@ -20,6 +20,11 @@ enum Role {
   USER
 }
 
+enum PlanType {
+  FREE
+  PAID
+}
+
 enum SubscriptionStatus {
   ACTIVE
   PAST_DUE
@@ -34,6 +39,7 @@ enum SubscriptionStatus {
 enum BillingCycle {
   MONTHLY
   YEARLY
+  NONE
 }
 
 enum FormFieldType {
@@ -126,13 +132,10 @@ model UserProjectAccess {
 model Plan {
   planId              String         @id @default(cuid())
   name                String         
-
-  monthlyPrice        String
-  yearlyPrice         String
-
-  razorpayMonthlyPlanId  String?  @unique
-  razorpayYearlyPlanId   String?  @unique
-  razorpaySubscriptionId String?      
+  planType            PlanType       @default(PAID)
+  billingCycle        BillingCycle   @default(NONE)
+  price               String         @default("0")
+  razorpayPlanId      String?        @unique
 
   projectLimit        Int
   collectionLimit     Int
@@ -150,13 +153,13 @@ model Plan {
   emailSupport        String
 
   displayOrder        Int            @default(0)
-  isActive             Boolean        @default(true)
-  isPopular            Boolean        @default(false)
+  isActive            Boolean        @default(true)
+  isPopular           Boolean        @default(false)
 
   subscriptions       Subscription[]
 
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 
