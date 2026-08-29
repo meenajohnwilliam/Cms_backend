@@ -2231,6 +2231,10 @@ const upgradeSubscription = async (req, res) => {
 
           status:
             "PENDING",
+             // ADD THIS
+      billingCycle:
+      newPlan.billingCycle,
+
 
           startDate:
             pendingStartDate,
