@@ -9,7 +9,7 @@ const { razorpay } = require("../utils/services/razorpay.service");
 
 const getCurrentSubscription = async (req, res) => {
   try {
-    const { tenantId } = req.user;
+    const { tenantId } = req.params;
 
     if (!tenantId) {
       return res.status(403).json({
