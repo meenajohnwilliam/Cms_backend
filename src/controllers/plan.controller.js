@@ -186,51 +186,33 @@ const createPlan = async (req, res) => {
     // 3. CREATE PLAN
     // ------------------------------------------
 
-    const plan =
-      await prisma.plan.create({
+    const plan = await prisma.plan.create({
         data: {
           name: name.trim(),
-
           type,
           billingCycle: billingCycle,
-
           price: String(price),
-
-          projectLimit:
-            Number(projectLimit),
-         
-            razorpayPlanId,
-
-          collectionLimit:
-            Number(collectionLimit),
-
+          projectLimit: Number(projectLimit),
+          razorpayPlanId,
+          collectionLimit:  Number(collectionLimit),
           apiKeyLimit:
             Number(apiKeyLimit),
-
           teamMemberLimit:
             Number(teamMemberLimit),
-
           storageLimit:
           mbToBytes(storageLimit),
-
           getRequestsLimit:
             Number(getRequestsLimit),
-
           writeRequestsLimit:
             Number(writeRequestsLimit),
-
           customDomain:
             customDomain ?? false,
-
           mediaUpload:
             mediaUpload ?? false,
-
           analytics:
             analytics.trim(),
-
           emailSupport:
             emailSupport.trim(),
-
           displayOrder:
             displayOrder !== undefined
               ? Number(displayOrder)
