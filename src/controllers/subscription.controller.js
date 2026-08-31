@@ -211,7 +211,7 @@ const getAvailablePlans = async (req, res) => {
     });
 
     if (plans.length === 0) {
-      return res.status(100).json({
+      return res.status(200).json({
         success:true,
         message: "You are currently on the maximum plan."
       })
@@ -228,7 +228,7 @@ const getAvailablePlans = async (req, res) => {
               ) / (1024 * 1024),
       }));
       
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
         count: formattedPlans.length,
         plans: formattedPlans,
