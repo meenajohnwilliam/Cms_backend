@@ -689,9 +689,16 @@ const getAvailablePlans = async (req, res) => {
 //   }
 // };
 
+// ==========================================================
+// UPGRADE SUBSCRIPTION
+// FREE → PAID
+// PAID → HIGHER PAID
+// ==========================================================
+
 const upgradeSubscription = async (req, res) => {
   try {
-    console.log("\n======================================================");
+    console.log("\n");
+    console.log("======================================================");
     console.log("🚀 UPGRADE SUBSCRIPTION STARTED");
     console.log("======================================================");
 
@@ -704,14 +711,10 @@ const upgradeSubscription = async (req, res) => {
     // 1. REQUEST
     // ======================================================
 
-    console.log("\n1️⃣ Request received");
+    console.log("\n1️⃣ REQUEST");
 
-    console.log("tenantId:", tenantId);
-    console.log("planId:", planId);
-
-    // ======================================================
-    // 2. VALIDATION
-    // ======================================================
+    console.log("Tenant ID:", tenantId);
+    console.log("Plan ID:", planId);
 
     if (!tenantId) {
       console.log("❌ Tenant ID missing");
@@ -732,11 +735,11 @@ const upgradeSubscription = async (req, res) => {
     }
 
     // ======================================================
-    // 3. GET CURRENT SUBSCRIPTION
+    // 2. CURRENT ACTIVE SUBSCRIPTION
     // ======================================================
 
     console.log(
-      "\n2️⃣ Getting current active subscription..."
+      "\n2️⃣ GETTING CURRENT ACTIVE SUBSCRIPTION"
     );
 
     const currentSubscription =
@@ -767,22 +770,8 @@ const upgradeSubscription = async (req, res) => {
       });
     }
 
-    console.log(
-      "\n3️⃣ Current subscription found"
-    );
-
-    console.log(
-      "Subscription ID:",
-      currentSubscription.subscriptionId
-    );
-
-    console.log(
-      "Current Plan ID:",
-      currentSubscription.planId
-    );
-
     // ======================================================
-    // 4. CURRENT PLAN
+    // 3. CURRENT PLAN
     // ======================================================
 
     const currentPlan =
@@ -795,25 +784,43 @@ const upgradeSubscription = async (req, res) => {
 
     const currentPrice =
       Number(
-        currentPlan.price
+        currentPlan.price || 0
       );
 
+    const currentType =
+      currentPlan.type;
+
     console.log(
-      "\n4️⃣ Current plan details"
+      "\n3️⃣ CURRENT PLAN"
     );
 
     console.log(
-      "Plan name:",
+      "Subscription ID:",
+      currentSubscription.subscriptionId
+    );
+
+    console.log(
+      "Plan ID:",
+      currentPlan.planId
+    );
+
+    console.log(
+      "Plan Name:",
       currentPlan.name
     );
 
     console.log(
-      "Plan level:",
+      "Plan Type:",
+      currentType
+    );
+
+    console.log(
+      "Plan Level:",
       currentLevel
     );
 
     console.log(
-      "Billing cycle:",
+      "Billing Cycle:",
       currentPlan.billingCycle
     );
 
@@ -823,11 +830,11 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // 5. GET NEW PLAN
+    // 4. NEW PLAN
     // ======================================================
 
     console.log(
-      "\n5️⃣ Getting selected new plan..."
+      "\n4️⃣ GETTING NEW PLAN"
     );
 
     const newPlan =
@@ -855,40 +862,52 @@ const upgradeSubscription = async (req, res) => {
 
     const newPrice =
       Number(
-        newPlan.price
+        newPlan.price || 0
       );
 
+    const newType =
+      newPlan.type;
+
+    const newBillingCycle =
+      newPlan.billingCycle;
+
     console.log(
-      "\n6️⃣ New plan found"
+      "New Plan ID:",
+      newPlan.planId
     );
 
     console.log(
-      "Plan name:",
+      "New Plan Name:",
       newPlan.name
     );
 
     console.log(
-      "Plan level:",
+      "New Plan Type:",
+      newType
+    );
+
+    console.log(
+      "New Plan Level:",
       newLevel
     );
 
     console.log(
-      "Billing cycle:",
-      newPlan.billingCycle
+      "New Billing Cycle:",
+      newBillingCycle
     );
 
     console.log(
-      "Price:",
+      "New Price:",
       newPrice
     );
 
     // ======================================================
-    // 6. CHECK ACTIVE
+    // 5. CHECK ACTIVE
     // ======================================================
 
     if (!newPlan.isActive) {
       console.log(
-        "❌ Selected plan is inactive"
+        "❌ New plan is inactive"
       );
 
       return res.status(400).json({
@@ -898,31 +917,33 @@ const upgradeSubscription = async (req, res) => {
     }
 
     console.log(
-      "✅ Selected plan is active"
+      "✅ New plan is active"
     );
 
     // ======================================================
-    // 7. CHECK PAID
+    // 6. NEW PLAN MUST BE PAID
     // ======================================================
 
-    if (newPlan.type !== "PAID") {
+    if (
+      newType !== "PAID"
+    ) {
       console.log(
-        "❌ Selected plan is not paid"
+        "❌ New plan is not paid"
       );
 
       return res.status(400).json({
         success: false,
         message:
-          "Only paid plans can be used for upgrade",
+          "Only paid plans can be selected",
       });
     }
 
     console.log(
-      "✅ Selected plan is PAID"
+      "✅ New plan is PAID"
     );
 
     // ======================================================
-    // 8. SAME PLAN
+    // 7. SAME PLAN
     // ======================================================
 
     if (
@@ -930,7 +951,7 @@ const upgradeSubscription = async (req, res) => {
       newPlan.planId
     ) {
       console.log(
-        "❌ User selected the current plan"
+        "❌ Same plan selected"
       );
 
       return res.status(400).json({
@@ -941,20 +962,35 @@ const upgradeSubscription = async (req, res) => {
     }
 
     // ======================================================
-    // 9. PLAN LEVEL CHECK
+    // 8. PLAN LEVEL CHECK
+    // ======================================================
+    //
+    // FREE LEVEL 0
+    // STARTER LEVEL 1
+    // PRO LEVEL 2
+    //
+    // FREE → STARTER
+    // 0 → 1 = ALLOWED
+    //
+    // STARTER → PRO
+    // 1 → 2 = ALLOWED
+    //
+    // PRO → STARTER
+    // 2 → 1 = DOWNGRADE
+    //
     // ======================================================
 
     console.log(
-      "\n7️⃣ Checking plan level..."
+      "\n5️⃣ CHECKING PLAN LEVEL"
     );
 
     console.log(
-      "Current level:",
+      "Current Level:",
       currentLevel
     );
 
     console.log(
-      "New level:",
+      "New Level:",
       newLevel
     );
 
@@ -962,7 +998,7 @@ const upgradeSubscription = async (req, res) => {
       newLevel <= currentLevel
     ) {
       console.log(
-        "❌ Not an upgrade"
+        "❌ Selected plan is not higher"
       );
 
       return res.status(400).json({
@@ -973,20 +1009,12 @@ const upgradeSubscription = async (req, res) => {
     }
 
     console.log(
-      `✅ Upgrade allowed: ${newLevel} > ${currentLevel}`
+      `✅ Upgrade allowed: ${currentLevel} → ${newLevel}`
     );
 
     // ======================================================
-    // 10. BILLING CYCLE
+    // 9. BILLING CYCLE
     // ======================================================
-
-    const newBillingCycle =
-      newPlan.billingCycle;
-
-    console.log(
-      "\n8️⃣ New billing cycle:",
-      newBillingCycle
-    );
 
     if (
       newBillingCycle !==
@@ -1001,29 +1029,24 @@ const upgradeSubscription = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "Paid plan must have MONTHLY or YEARLY billing cycle",
+          "Invalid billing cycle",
       });
     }
 
     // ======================================================
-    // 11. RAZORPAY PLAN
+    // 10. RAZORPAY PLAN ID
     // ======================================================
 
     console.log(
-      "\n9️⃣ Checking Razorpay plan..."
+      "\n6️⃣ CHECKING RAZORPAY PLAN"
     );
 
     const razorpayPlanId =
       newPlan.razorpayPlanId;
 
-    console.log(
-      "Razorpay Plan ID:",
-      razorpayPlanId
-    );
-
     if (!razorpayPlanId) {
       console.log(
-        "❌ Razorpay plan not configured"
+        "❌ Razorpay plan ID missing"
       );
 
       return res.status(400).json({
@@ -1033,177 +1056,265 @@ const upgradeSubscription = async (req, res) => {
       });
     }
 
+    console.log(
+      "Razorpay Plan ID:",
+      razorpayPlanId
+    );
+
     // ======================================================
-    // 12. CURRENT DATES
+    // 11. PAYMENT CALCULATION
+    // ======================================================
+    //
+    // CASE 1:
+    //
+    // FREE → PAID
+    //
+    // No unused credit.
+    //
+    // amountToPay = newPrice
+    //
+    // CASE 2:
+    //
+    // PAID → PAID
+    //
+    // Calculate unused credit.
+    //
+    // amountToPay =
+    // newPrice - unusedCredit
+    //
     // ======================================================
 
-    const startDate =
-      new Date(
-        currentSubscription.startDate
+    let totalDays = 0;
+    let usedDays = 0;
+    let remainingDays = 0;
+    let unusedCredit = 0;
+    let amountToPay = 0;
+
+    // ======================================================
+    // CASE 1: FREE → PAID
+    // ======================================================
+
+    if (
+      currentType === "FREE"
+    ) {
+      console.log(
+        "\n7️⃣ FREE → PAID"
       );
 
-    const endDate =
-      new Date(
-        currentSubscription.endDate
+      console.log(
+        "No previous paid subscription"
       );
 
-    const now =
-      new Date();
-
-    console.log(
-      "\n🔟 Current subscription dates"
-    );
-
-    console.log(
-      "Start date:",
-      startDate
-    );
-
-    console.log(
-      "End date:",
-      endDate
-    );
-
-    console.log(
-      "Current date:",
-      now
-    );
-
-    // ======================================================
-    // 13. CALCULATE DAYS
-    // ======================================================
-
-    console.log(
-      "\n1️⃣1️⃣ Calculating subscription usage..."
-    );
-
-    const totalMilliseconds =
-      endDate.getTime() -
-      startDate.getTime();
-
-    const usedMilliseconds =
-      now.getTime() -
-      startDate.getTime();
-
-    const remainingMilliseconds =
-      endDate.getTime() -
-      now.getTime();
-
-    const totalDays =
-      Math.max(
-        1,
-        Math.ceil(
-          totalMilliseconds /
-            (1000 * 60 * 60 * 24)
-        )
+      console.log(
+        "No unused credit calculation required"
       );
 
-    const usedDays =
-      Math.max(
-        0,
-        Math.ceil(
-          usedMilliseconds /
-            (1000 * 60 * 60 * 24)
-        )
+      unusedCredit = 0;
+
+      amountToPay =
+        Number(
+          newPrice.toFixed(2)
+        );
+
+      console.log(
+        "New Plan Price:",
+        newPrice
       );
 
-    const remainingDays =
-      Math.max(
-        0,
-        Math.ceil(
-          remainingMilliseconds /
-            (1000 * 60 * 60 * 24)
-        )
+      console.log(
+        "Unused Credit:",
+        unusedCredit
       );
 
-    console.log(
-      "Total days:",
-      totalDays
-    );
-
-    console.log(
-      "Used days:",
-      usedDays
-    );
-
-    console.log(
-      "Remaining days:",
-      remainingDays
-    );
+      console.log(
+        "Amount To Pay:",
+        amountToPay
+      );
+    }
 
     // ======================================================
-    // 14. UNUSED CREDIT
+    // CASE 2: PAID → PAID
     // ======================================================
 
-    console.log(
-      "\n1️⃣2️⃣ Calculating unused credit..."
-    );
-
-    const unusedCredit =
-      Number(
-        (
-          currentPrice *
-          remainingDays /
-          totalDays
-        ).toFixed(2)
+    else {
+      console.log(
+        "\n7️⃣ PAID → PAID UPGRADE"
       );
 
-    console.log(
-      "Current plan price:",
-      currentPrice
-    );
+      const startDate =
+        new Date(
+          currentSubscription.startDate
+        );
 
-    console.log(
-      "Remaining days:",
-      remainingDays
-    );
+      const endDate =
+        new Date(
+          currentSubscription.endDate
+        );
 
-    console.log(
-      "Total days:",
-      totalDays
-    );
+      const now =
+        new Date();
 
-    console.log(
-      "Unused credit:",
-      unusedCredit
-    );
-
-    // ======================================================
-    // 15. AMOUNT TO PAY
-    // ======================================================
-
-    console.log(
-      "\n1️⃣3️⃣ Calculating amount to pay..."
-    );
-
-    const amountToPay =
-      Number(
-        (
-          newPrice -
-          unusedCredit
-        ).toFixed(2)
+      console.log(
+        "Current Start Date:",
+        startDate
       );
 
-    console.log(
-      "New plan price:",
-      newPrice
-    );
+      console.log(
+        "Current End Date:",
+        endDate
+      );
 
-    console.log(
-      "Unused credit:",
-      unusedCredit
-    );
+      console.log(
+        "Current Date:",
+        now
+      );
 
-    console.log(
-      "Amount to pay:",
-      amountToPay
-    );
+      // ====================================================
+      // DAY
+      // ====================================================
+
+      const DAY =
+        1000 *
+        60 *
+        60 *
+        24;
+
+      // ====================================================
+      // CALCULATE DAYS
+      // ====================================================
+
+      const totalMilliseconds =
+        endDate.getTime() -
+        startDate.getTime();
+
+      const usedMilliseconds =
+        now.getTime() -
+        startDate.getTime();
+
+      const remainingMilliseconds =
+        endDate.getTime() -
+        now.getTime();
+
+      totalDays =
+        Math.max(
+          1,
+          Math.ceil(
+            totalMilliseconds /
+              DAY
+          )
+        );
+
+      usedDays =
+        Math.max(
+          0,
+          Math.ceil(
+            usedMilliseconds /
+              DAY
+          )
+        );
+
+      remainingDays =
+        Math.max(
+          0,
+          Math.ceil(
+            remainingMilliseconds /
+              DAY
+          )
+        );
+
+      console.log(
+        "\nSubscription Days:"
+      );
+
+      console.log(
+        "Total Days:",
+        totalDays
+      );
+
+      console.log(
+        "Used Days:",
+        usedDays
+      );
+
+      console.log(
+        "Remaining Days:",
+        remainingDays
+      );
+
+      // ====================================================
+      // UNUSED CREDIT
+      // ====================================================
+
+      unusedCredit =
+        Number(
+          (
+            currentPrice *
+            remainingDays /
+            totalDays
+          ).toFixed(2)
+        );
+
+      console.log(
+        "\nUnused Credit:"
+      );
+
+      console.log(
+        "Current Price:",
+        currentPrice
+      );
+
+      console.log(
+        "Remaining Days:",
+        remainingDays
+      );
+
+      console.log(
+        "Unused Credit:",
+        unusedCredit
+      );
+
+      // ====================================================
+      // AMOUNT TO PAY
+      // ====================================================
+
+      amountToPay =
+        Number(
+          (
+            newPrice -
+            unusedCredit
+          ).toFixed(2)
+        );
+
+      console.log(
+        "\nUpgrade Amount:"
+      );
+
+      console.log(
+        "New Plan Price:",
+        newPrice
+      );
+
+      console.log(
+        "Unused Credit:",
+        unusedCredit
+      );
+
+      console.log(
+        "Amount To Pay:",
+        amountToPay
+      );
+    }
+
+    // ======================================================
+    // 12. FINAL AMOUNT VALIDATION
+    // ======================================================
 
     if (
       amountToPay <= 0
     ) {
       console.log(
-        "❌ Invalid upgrade amount"
+        "❌ Invalid amount to pay:",
+        amountToPay
       );
 
       return res.status(400).json({
@@ -1214,11 +1325,108 @@ const upgradeSubscription = async (req, res) => {
     }
 
     // ======================================================
-    // 16. CREATE RAZORPAY SUBSCRIPTION
+    // 13. CREATE RAZORPAY ORDER
+    // ======================================================
+    //
+    // This collects the amount payable NOW.
+    //
+    // FREE → PAID
+    // Example: ₹999
+    //
+    // PAID → PAID
+    // Example: ₹1666
+    //
     // ======================================================
 
     console.log(
-      "\n1️⃣4️⃣ Creating Razorpay subscription..."
+      "\n8️⃣ CREATING RAZORPAY ORDER"
+    );
+
+    const razorpayOrder =
+      await razorpay.orders.create({
+        amount:
+          Math.round(
+            amountToPay * 100
+          ),
+
+        currency:
+          "INR",
+
+        receipt:
+          `upgrade_${tenantId}_${Date.now()}`,
+
+        notes: {
+          tenantId,
+
+          oldPlanId:
+            currentPlan.planId,
+
+          newPlanId:
+            newPlan.planId,
+
+          oldPlanLevel:
+            String(
+              currentLevel
+            ),
+
+          newPlanLevel:
+            String(
+              newLevel
+            ),
+
+          oldBillingCycle:
+            currentPlan.billingCycle ||
+            "NONE",
+
+          newBillingCycle,
+
+          currentPrice:
+            String(
+              currentPrice
+            ),
+
+          newPrice:
+            String(
+              newPrice
+            ),
+
+          unusedCredit:
+            String(
+              unusedCredit
+            ),
+
+          amountToPay:
+            String(
+              amountToPay
+            ),
+
+          upgradeType:
+            currentType === "FREE"
+              ? "FREE_TO_PAID"
+              : "PAID_TO_PAID",
+        },
+      });
+
+    console.log(
+      "✅ Razorpay Order Created"
+    );
+
+    console.log(
+      "Order ID:",
+      razorpayOrder.id
+    );
+
+    console.log(
+      "Order Amount:",
+      razorpayOrder.amount / 100
+    );
+
+    // ======================================================
+    // 14. CREATE RAZORPAY AUTOPAY SUBSCRIPTION
+    // ======================================================
+
+    console.log(
+      "\n9️⃣ CREATING RAZORPAY AUTOPAY SUBSCRIPTION"
     );
 
     const razorpaySubscription =
@@ -1242,13 +1450,13 @@ const upgradeSubscription = async (req, res) => {
           oldPlanId:
             currentPlan.planId,
 
+          newPlanId:
+            newPlan.planId,
+
           oldPlanLevel:
             String(
               currentLevel
             ),
-
-          newPlanId:
-            newPlan.planId,
 
           newPlanLevel:
             String(
@@ -1256,7 +1464,8 @@ const upgradeSubscription = async (req, res) => {
             ),
 
           oldBillingCycle:
-            currentPlan.billingCycle,
+            currentPlan.billingCycle ||
+            "NONE",
 
           newBillingCycle,
 
@@ -1279,20 +1488,28 @@ const upgradeSubscription = async (req, res) => {
             String(
               amountToPay
             ),
+
+          upgradeOrderId:
+            razorpayOrder.id,
+
+          upgradeType:
+            currentType === "FREE"
+              ? "FREE_TO_PAID"
+              : "PAID_TO_PAID",
         },
       });
 
     console.log(
-      "✅ Razorpay subscription created"
+      "✅ Razorpay AutoPay Subscription Created"
     );
 
     console.log(
-      "Razorpay subscription ID:",
+      "Razorpay Subscription ID:",
       razorpaySubscription.id
     );
 
     // ======================================================
-    // 17. NEW SUBSCRIPTION DATES
+    // 15. NEW SUBSCRIPTION DATES
     // ======================================================
 
     const pendingStartDate =
@@ -1310,32 +1527,34 @@ const upgradeSubscription = async (req, res) => {
       pendingEndDate.setMonth(
         pendingEndDate.getMonth() + 1
       );
-    } else {
+    }
+
+    else {
       pendingEndDate.setFullYear(
         pendingEndDate.getFullYear() + 1
       );
     }
 
     console.log(
-      "\n1️⃣5️⃣ New subscription dates"
+      "\n🔟 NEW SUBSCRIPTION DATES"
     );
 
     console.log(
-      "Pending start date:",
+      "Start:",
       pendingStartDate
     );
 
     console.log(
-      "Pending end date:",
+      "End:",
       pendingEndDate
     );
 
     // ======================================================
-    // 18. CREATE DB SUBSCRIPTION
+    // 16. CREATE DB SUBSCRIPTION
     // ======================================================
 
     console.log(
-      "\n1️⃣6️⃣ Creating pending database subscription..."
+      "\n1️⃣1️⃣ CREATING PENDING DB SUBSCRIPTION"
     );
 
     const pendingSubscription =
@@ -1348,6 +1567,12 @@ const upgradeSubscription = async (req, res) => {
 
           status:
             "PENDING",
+
+          /*
+           * Keep this only if billingCycle
+           * exists in Subscription model
+           * and is required.
+           */
 
           billingCycle:
             newPlan.billingCycle,
@@ -1364,11 +1589,11 @@ const upgradeSubscription = async (req, res) => {
       });
 
     console.log(
-      "✅ Pending subscription created"
+      "✅ DB Subscription Created"
     );
 
     console.log(
-      "Database subscription ID:",
+      "Subscription ID:",
       pendingSubscription.subscriptionId
     );
 
@@ -1378,11 +1603,11 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // 19. CREATE PAYMENT
+    // 17. CREATE PAYMENT RECORD
     // ======================================================
 
     console.log(
-      "\n1️⃣7️⃣ Creating payment record..."
+      "\n1️⃣2️⃣ CREATING PAYMENT RECORD"
     );
 
     const payment =
@@ -1404,13 +1629,16 @@ const upgradeSubscription = async (req, res) => {
           status:
             "PENDING",
 
+          razorpayOrderId:
+            razorpayOrder.id,
+
           razorpaySubscriptionId:
             razorpaySubscription.id,
         },
       });
 
     console.log(
-      "✅ Payment record created"
+      "✅ Payment Record Created"
     );
 
     console.log(
@@ -1429,7 +1657,7 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // SUCCESS
+    // 18. FINAL LOG
     // ======================================================
 
     console.log(
@@ -1437,7 +1665,43 @@ const upgradeSubscription = async (req, res) => {
     );
 
     console.log(
-      "✅ UPGRADE SUBSCRIPTION CREATED SUCCESSFULLY"
+      "✅ UPGRADE CREATED SUCCESSFULLY"
+    );
+
+    console.log(
+      "======================================================"
+    );
+
+    console.log(
+      "Upgrade Type:",
+      currentType === "FREE"
+        ? "FREE → PAID"
+        : "PAID → PAID"
+    );
+
+    console.log(
+      "Old Plan:",
+      currentPlan.name
+    );
+
+    console.log(
+      "New Plan:",
+      newPlan.name
+    );
+
+    console.log(
+      "Amount To Pay:",
+      amountToPay
+    );
+
+    console.log(
+      "Razorpay Order:",
+      razorpayOrder.id
+    );
+
+    console.log(
+      "Razorpay Subscription:",
+      razorpaySubscription.id
     );
 
     console.log(
@@ -1445,14 +1709,19 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // RESPONSE
+    // 19. RESPONSE
     // ======================================================
 
     return res.status(201).json({
       success: true,
 
       message:
-        "Upgrade subscription created successfully",
+        "Upgrade payment created successfully",
+
+      upgradeType:
+        currentType === "FREE"
+          ? "FREE_TO_PAID"
+          : "PAID_TO_PAID",
 
       currentPlan: {
         planId:
@@ -1460,6 +1729,9 @@ const upgradeSubscription = async (req, res) => {
 
         name:
           currentPlan.name,
+
+        type:
+          currentPlan.type,
 
         planLevel:
           currentLevel,
@@ -1478,6 +1750,9 @@ const upgradeSubscription = async (req, res) => {
         name:
           newPlan.name,
 
+        type:
+          newPlan.type,
+
         planLevel:
           newLevel,
 
@@ -1495,8 +1770,7 @@ const upgradeSubscription = async (req, res) => {
 
         remainingDays,
 
-        currentPlanUnusedCredit:
-          unusedCredit,
+        unusedCredit,
 
         newPlanPrice:
           newPrice,
@@ -1508,10 +1782,16 @@ const upgradeSubscription = async (req, res) => {
         keyId:
           config.razorpay.keyId,
 
+        orderId:
+          razorpayOrder.id,
+
+        orderAmount:
+          razorpayOrder.amount,
+
         subscriptionId:
           razorpaySubscription.id,
 
-        planId:
+        subscriptionPlanId:
           razorpayPlanId,
       },
 
@@ -1529,15 +1809,28 @@ const upgradeSubscription = async (req, res) => {
           "PENDING",
       },
     });
+
   } catch (error) {
     console.error(
-      "\n❌ Upgrade Subscription Error:",
-      error
+      "\n======================================================"
     );
 
     console.error(
-      "Error message:",
+      "❌ UPGRADE SUBSCRIPTION ERROR"
+    );
+
+    console.error(
+      "======================================================"
+    );
+
+    console.error(
+      "Message:",
       error.message
+    );
+
+    console.error(
+      "Full Error:",
+      error
     );
 
     return res.status(500).json({
