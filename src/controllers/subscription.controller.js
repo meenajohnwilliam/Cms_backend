@@ -149,7 +149,7 @@ const getCurrentSubscription = async (req, res) => {
 const getAvailablePlans = async (req, res) => {
   try {
 
-    const { tenantId } = req.params;
+    const { tenantId } = req.user;
 
     if (!tenantId) {
       return res.status(400).json({
