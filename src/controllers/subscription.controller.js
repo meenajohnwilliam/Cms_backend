@@ -213,6 +213,13 @@ const getAvailablePlans = async (req, res) => {
       ],
     });
 
+    if (plans.lenth === 0) {
+      return res.status(200).json({
+        success:true,
+        message: "You are currently on the maximum plan."
+      })
+    }
+
       const formattedPlans = plans.map((plan) => ({
         ...plan,
       
