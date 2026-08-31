@@ -79,6 +79,11 @@ const getCurrentSubscription = async (req, res) => {
           billingCycle:
             subscription.plan.billingCycle,
 
+
+          planLevel:
+          subscription.plan.planLevel,
+
+
           price:
             subscription.plan.price,
 
@@ -143,10 +148,58 @@ const getCurrentSubscription = async (req, res) => {
 
 const getAvailablePlans = async (req, res) => {
   try {
+
+    const { tenantId } = req.params;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant ID is required",
+      });
+    }
+
+        // ==========================================
+    // GET CURRENT ACTIVE SUBSCRIPTION
+    // ==========================================
+
+    const currentSubscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: "ACTIVE",
+        },
+
+        include: {
+          plan: true,
+        },
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!currentSubscription) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Active subscription not found",
+      });
+    }
+
+
+    const currentLevel =
+    Number(
+      currentSubscription.plan.planLevel
+    );
+
+
     const plans =
     await prisma.plan.findMany({
       where: {
         isActive: true,
+        planLevel: {
+          gt: currentLevel,
+        },
       },
 
       orderBy: [
