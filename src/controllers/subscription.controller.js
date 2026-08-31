@@ -187,10 +187,7 @@ const getAvailablePlans = async (req, res) => {
     }
 
 
-    const currentLevel =
-    Number(
-      currentSubscription.plan.planLevel
-    );
+    const currentLevel = Number(currentSubscription.plan.planLevel);
 
 
     const plans =
@@ -213,7 +210,7 @@ const getAvailablePlans = async (req, res) => {
       ],
     });
 
-    if (plans.lenth === 0) {
+    if (plans.length === 0) {
       return res.status(200).json({
         success:true,
         message: "You are currently on the maximum plan."
