@@ -1942,11 +1942,9 @@ const upgradeSubscription = async (req, res) => {
     // 2. GET CURRENT SUBSCRIPTION
     // ======================================================
 
-    const currentSubscription =
-      await prisma.subscription.findFirst({
+    const currentSubscription = await prisma.subscription.findFirst({
         where: {
           tenantId,
-
           status: "ACTIVE",
         },
 
@@ -1971,8 +1969,7 @@ const upgradeSubscription = async (req, res) => {
     // 3. GET NEW PLAN
     // ======================================================
 
-    const newPlan =
-      await prisma.plan.findUnique({
+    const newPlan = await prisma.plan.findUnique({
         where: {
           planId,
         },

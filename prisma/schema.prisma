@@ -145,6 +145,7 @@ model Plan {
   apiKeyLimit         Int
   teamMemberLimit     Int
   storageLimit        BigInt
+  planLevel           Int
 
   getRequestsLimit    Int
   writeRequestsLimit  Int
@@ -180,6 +181,7 @@ model Subscription {
 
   startDate            DateTime
   endDate              DateTime
+  gracePeriodEndDate   DateTime?
 
   razorpaySubscriptionId  String?            @unique
   razorpayCustomerId      String?
@@ -453,6 +455,7 @@ model Usage {
   projectsUsed     Int      @default(0)
   collectionsUsed  Int      @default(0)
   teamMembersUsed  Int      @default(0)
+  usageResetAt     DateTime?
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

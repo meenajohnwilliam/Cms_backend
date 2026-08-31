@@ -39,6 +39,7 @@ const createPlan = async (req, res) => {
       type,
       billingCycle,
       price,
+      planLevel,
       projectLimit,
       collectionLimit,
       apiKeyLimit,
@@ -63,6 +64,7 @@ const createPlan = async (req, res) => {
       !type ||
       !billingCycle ||
       price === undefined ||
+      planLevel === undefined ||
       projectLimit === undefined ||
       collectionLimit === undefined ||
       apiKeyLimit === undefined ||
@@ -108,18 +110,29 @@ const createPlan = async (req, res) => {
     // 4. FREE PLAN VALIDATION
     // ======================================================
 
+  
     if (type === "FREE") {
       if (billingCycle !== "NONE") {
         return res.status(400).json({
           success: false,
-          message: "FREE plan must have billingCycle NONE",
+          message:
+            "FREE plan billing cycle must be NONE",
         });
       }
 
       if (Number(price) !== 0) {
         return res.status(400).json({
           success: false,
-          message: "FREE plan price must be 0",
+          message:
+            "FREE plan price must be 0",
+        });
+      }
+
+      if (Number(planLevel) !== 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "FREE plan level must be 0",
         });
       }
     }
@@ -129,18 +142,30 @@ const createPlan = async (req, res) => {
     // ======================================================
 
     if (type === "PAID") {
-      if (!["MONTHLY", "YEARLY"].includes(billingCycle)) {
+      if (
+        billingCycle !== "MONTHLY" &&
+        billingCycle !== "YEARLY"
+      ) {
         return res.status(400).json({
           success: false,
           message:
-            "PAID plan must have MONTHLY or YEARLY billing cycle",
+            "PAID plan billing cycle must be MONTHLY or YEARLY",
         });
       }
 
       if (Number(price) <= 0) {
         return res.status(400).json({
           success: false,
-          message: "PAID plan price must be greater than 0",
+          message:
+            "PAID plan price must be greater than 0",
+        });
+      }
+
+      if (Number(planLevel) <= 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "PAID plan level must be greater than 0",
         });
       }
     }
@@ -192,6 +217,7 @@ const createPlan = async (req, res) => {
           type,
           billingCycle: billingCycle,
           price: String(price),
+          planLevel: Number(planLevel),
           projectLimit: Number(projectLimit),
           razorpayPlanId,
           collectionLimit:  Number(collectionLimit),
@@ -309,11 +335,9 @@ const getPlan = async (req, res) => {
     return res.status(200).json({
       success: true,
     
-      plan: {
-        ...plan,
-        storageLimit: bytesToMB(plan.storageLimit),
-      },
-    });
+      plan:
+      formatPlan(plan),
+  });
   } catch (error) {
     console.error(
       "Get Plan Error:",
@@ -813,6 +837,7 @@ const updatePlan = async (req, res) => {
       billingCycle,
       price,
       projectLimit,
+      planLevel,
       collectionLimit,
       apiKeyLimit,
       teamMemberLimit,
@@ -872,6 +897,14 @@ const updatePlan = async (req, res) => {
       price !== undefined
         ? String(price)
         : existingPlan.price;
+    
+        const finalPlanLevel =
+      planLevel !== undefined
+        ? Number(planLevel)
+        : Number(
+            existingPlan.planLevel
+          );
+
 
     // ======================================================
     // 3. VALIDATE TYPE
@@ -918,6 +951,16 @@ const updatePlan = async (req, res) => {
           message: "FREE plan price must be 0",
         });
       }
+      if (
+        finalPlanLevel !== 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "FREE plan level must be 0",
+        });
+      }
+    
     }
 
     // ======================================================
@@ -944,7 +987,17 @@ const updatePlan = async (req, res) => {
             "PAID plan price must be greater than 0",
         });
       }
+      if (
+        finalPlanLevel <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "PAID plan level must be greater than 0",
+        });
+      }
     }
+    
 
     // ======================================================
     // 7. CHECK DUPLICATE PLAN
@@ -1038,6 +1091,7 @@ const updatePlan = async (req, res) => {
           billingCycle: finalBillingCycle,
 
           price: finalPrice,
+          planLevel: finalPlanLevel,
 
           razorpayPlanId: newRazorpayPlanId,
 
@@ -1232,6 +1286,8 @@ const updatePlan = async (req, res) => {
         ...(price !== undefined && {
           price: String(price),
         }),
+        
+        planLevel: finalPlanLevel,
 
         razorpayPlanId,
 
