@@ -2709,7 +2709,7 @@ const razorpayWebhook = async (req, res) => {
     const expectedSignature = crypto
       .createHmac(
         "sha256",
-        config.razorpay.webhookSecret
+        config.razorpay.keySecret
       )
       .update(req.body)
       .digest("hex");
