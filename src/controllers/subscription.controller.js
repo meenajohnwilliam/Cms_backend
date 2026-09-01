@@ -2335,7 +2335,7 @@ const razorpayWebhook = async (req, res) => {
     }
 
     const webhookSecret =
-      config.razorpay.webhookSecret;
+      config.razorpay.keySecret;
 
     if (!webhookSecret) {
       throw new Error(
