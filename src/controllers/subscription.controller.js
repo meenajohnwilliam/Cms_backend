@@ -1839,6 +1839,477 @@ const getAvailablePlans = async (req, res) => {
 // UPGRADE SUBSCRIPTION
 // ==========================================================
 
+// const upgradeSubscription = async (req, res) => {
+//   try {
+//     console.log("\n======================================================");
+//     console.log("🚀 UPGRADE SUBSCRIPTION STARTED");
+//     console.log("======================================================");
+
+//     const { tenantId, planId } = req.body;
+
+//     // ======================================================
+//     // 1. VALIDATE REQUEST
+//     // ======================================================
+
+//     if (!tenantId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "tenantId is required",
+//       });
+//     }
+
+//     if (!planId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "planId is required",
+//       });
+//     }
+
+//     // ======================================================
+//     // 2. GET CURRENT ACTIVE SUBSCRIPTION
+//     // ======================================================
+
+//     const currentSubscription =
+//       await prisma.subscription.findFirst({
+//         where: {
+//           tenantId,
+//           status: "ACTIVE",
+//         },
+
+//         include: {
+//           plan: true,
+//         },
+
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//       });
+
+//     if (!currentSubscription) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Current active subscription not found",
+//       });
+//     }
+
+//     const currentPlan = currentSubscription.plan;
+
+//     // ======================================================
+//     // 3. GET NEW PLAN
+//     // ======================================================
+
+//     const newPlan = await prisma.plan.findUnique({
+//       where: {
+//         planId,
+//       },
+//     });
+
+//     if (!newPlan) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "New plan not found",
+//       });
+//     }
+
+//     // ======================================================
+//     // 4. VALIDATE NEW PLAN
+//     // ======================================================
+
+//     if (!newPlan.isActive) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Selected plan is inactive",
+//       });
+//     }
+
+//     if (newPlan.type !== "PAID") {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Only paid plans can be upgraded to",
+//       });
+//     }
+
+//     if (currentPlan.planId === newPlan.planId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "You are already using this plan",
+//       });
+//     }
+
+//     const currentLevel = Number(currentPlan.planLevel);
+//     const newLevel = Number(newPlan.planLevel);
+
+//     if (newLevel <= currentLevel) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Selected plan is not an upgrade",
+//       });
+//     }
+
+//     // ======================================================
+//     // 5. CHECK RAZORPAY PLAN
+//     // ======================================================
+
+//     if (!newPlan.razorpayPlanId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Razorpay plan is not configured",
+//       });
+//     }
+
+//     const currentPrice = Number(currentPlan.price || 0);
+//     const newPrice = Number(newPlan.price || 0);
+
+//     console.log("\n📌 CURRENT PLAN");
+//     console.log("Plan:", currentPlan.name);
+//     console.log("Price:", currentPrice);
+//     console.log("Type:", currentPlan.type);
+//     console.log("Level:", currentLevel);
+
+//     console.log("\n📌 NEW PLAN");
+//     console.log("Plan:", newPlan.name);
+//     console.log("Price:", newPrice);
+//     console.log("Level:", newLevel);
+//     console.log("Billing:", newPlan.billingCycle);
+
+//     // ======================================================
+//     // 6. CALCULATE AMOUNT TO PAY NOW
+//     // ======================================================
+
+//     let unusedCredit = 0;
+//     let amountToPay = newPrice;
+
+//     let totalDays = 0;
+//     let usedDays = 0;
+//     let remainingDays = 0;
+
+//     // ======================================================
+//     // FREE → PAID
+//     // ======================================================
+
+//     if (currentPlan.type === "FREE") {
+//       console.log("\n🆓 FREE → PAID");
+
+//       amountToPay = newPrice;
+//     }
+
+//     // ======================================================
+//     // PAID → PAID
+//     // ======================================================
+
+//     else {
+//       console.log("\n💳 PAID → PAID");
+
+//       const startDate = new Date(
+//         currentSubscription.startDate
+//       );
+
+//       const endDate = new Date(
+//         currentSubscription.endDate
+//       );
+
+//       const now = new Date();
+
+//       const DAY = 1000 * 60 * 60 * 24;
+
+//       totalDays = Math.max(
+//         1,
+//         Math.ceil(
+//           (endDate.getTime() - startDate.getTime()) /
+//             DAY
+//         )
+//       );
+
+//       usedDays = Math.max(
+//         0,
+//         Math.ceil(
+//           (now.getTime() - startDate.getTime()) /
+//             DAY
+//         )
+//       );
+
+//       remainingDays = Math.max(
+//         0,
+//         Math.ceil(
+//           (endDate.getTime() - now.getTime()) /
+//             DAY
+//         )
+//       );
+
+//       unusedCredit = Number(
+//         (
+//           (currentPrice * remainingDays) /
+//           totalDays
+//         ).toFixed(2)
+//       );
+
+//       amountToPay = Number(
+//         Math.max(
+//           1,
+//           newPrice - unusedCredit
+//         ).toFixed(2)
+//       );
+
+//       console.log("Total Days:", totalDays);
+//       console.log("Used Days:", usedDays);
+//       console.log("Remaining Days:", remainingDays);
+//       console.log("Unused Credit:", unusedCredit);
+//       console.log("Amount To Pay Now:", amountToPay);
+//     }
+
+//     // ======================================================
+//     // 7. PREVENT DUPLICATE PENDING UPGRADE
+//     // ======================================================
+
+//     const existingPending =
+//       await prisma.subscription.findFirst({
+//         where: {
+//           tenantId,
+//           planId: newPlan.planId,
+//           status: "PENDING",
+//         },
+//       });
+
+//     if (existingPending) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "An upgrade to this plan is already pending",
+//       });
+//     }
+
+//     // ======================================================
+//     // 8. CREATE NEW RAZORPAY SUBSCRIPTION
+//     // ======================================================
+//     //
+//     // IMPORTANT:
+//     //
+//     // This creates the future recurring AutoPay.
+//     //
+//     // It does NOT replace the prorated upgrade payment.
+//     //
+//     // ======================================================
+
+//     console.log("\n🔄 CREATING NEW RAZORPAY AUTOPAY");
+
+//     const razorpaySubscription =
+//       await razorpay.subscriptions.create({
+//         plan_id: newPlan.razorpayPlanId,
+
+//         quantity: 1,
+
+//         customer_notify: 1,
+
+//         total_count:
+//           newPlan.billingCycle === "MONTHLY"
+//             ? 120
+//             : 10,
+
+//         notes: {
+//           tenantId,
+//           oldSubscriptionId:
+//             currentSubscription.subscriptionId,
+//           oldPlanId: currentPlan.planId,
+//           newPlanId: newPlan.planId,
+//           upgradeType:
+//             currentPlan.type === "FREE"
+//               ? "FREE_TO_PAID"
+//               : "PAID_TO_PAID",
+//         },
+//       });
+
+//     console.log(
+//       "✅ Razorpay Subscription Created:",
+//       razorpaySubscription.id
+//     );
+
+//     // ======================================================
+//     // 9. CREATE PENDING DB SUBSCRIPTION
+//     // ======================================================
+
+//     const pendingSubscription =
+//       await prisma.subscription.create({
+//         data: {
+//           tenantId,
+
+//           planId: newPlan.planId,
+
+//           status: "PENDING",
+
+//           billingCycle: newPlan.billingCycle,
+
+//           startDate: new Date(),
+
+//           endDate: new Date(),
+
+//           razorpaySubscriptionId:
+//             razorpaySubscription.id,
+//         },
+//       });
+
+//     console.log(
+//       "✅ Pending DB subscription created:",
+//       pendingSubscription.subscriptionId
+//     );
+
+//     // ======================================================
+//     // 10. CREATE ONE-TIME ORDER FOR AMOUNT NOW
+//     // ======================================================
+
+//     console.log("\n💰 CREATING UPGRADE PAYMENT ORDER");
+
+//     const razorpayOrder =
+//       await razorpay.orders.create({
+//         amount: Math.round(amountToPay * 100),
+
+//         currency: "INR",
+
+//         receipt:
+//           `upgrade_${pendingSubscription.subscriptionId}_${Date.now()}`,
+
+//         notes: {
+//           tenantId,
+
+//           subscriptionId:
+//             pendingSubscription.subscriptionId,
+
+//           oldSubscriptionId:
+//             currentSubscription.subscriptionId,
+
+//           razorpaySubscriptionId:
+//             razorpaySubscription.id,
+
+//           oldPlanId:
+//             currentPlan.planId,
+
+//           newPlanId:
+//             newPlan.planId,
+
+//           amountToPay:
+//             String(amountToPay),
+
+//           unusedCredit:
+//             String(unusedCredit),
+
+//           upgradeType:
+//             currentPlan.type === "FREE"
+//               ? "FREE_TO_PAID"
+//               : "PAID_TO_PAID",
+//         },
+//       });
+
+//     console.log(
+//       "✅ Razorpay Upgrade Order Created:",
+//       razorpayOrder.id
+//     );
+
+//     // ======================================================
+//     // 11. CREATE DB PAYMENT
+//     // ======================================================
+
+//     const payment =
+//       await prisma.payment.create({
+//         data: {
+//           tenantId,
+
+//           subscriptionId:
+//             pendingSubscription.subscriptionId,
+
+//           amount: String(amountToPay),
+
+//           currency: "INR",
+
+//           status: "PENDING",
+
+//           razorpayOrderId:
+//             razorpayOrder.id,
+
+//           razorpaySubscriptionId:
+//             razorpaySubscription.id,
+//         },
+//       });
+
+//     console.log(
+//       "✅ Upgrade payment record created:",
+//       payment.paymentId
+//     );
+
+//     // ======================================================
+//     // 12. FINAL RESPONSE
+//     // ======================================================
+
+//     return res.status(201).json({
+//       success: true,
+
+//       message:
+//         "Upgrade created successfully",
+
+//       upgradeType:
+//         currentPlan.type === "FREE"
+//           ? "FREE_TO_PAID"
+//           : "PAID_TO_PAID",
+
+//       currentPlan: {
+//         planId: currentPlan.planId,
+//         name: currentPlan.name,
+//         price: currentPrice,
+//         billingCycle:
+//           currentPlan.billingCycle,
+//       },
+
+//       newPlan: {
+//         planId: newPlan.planId,
+//         name: newPlan.name,
+//         price: newPrice,
+//         billingCycle:
+//           newPlan.billingCycle,
+//       },
+
+//       upgrade: {
+//         totalDays,
+//         usedDays,
+//         remainingDays,
+//         unusedCredit,
+//         amountToPay,
+//       },
+
+//       razorpay: {
+//         keyId: config.razorpay.keyId,
+
+//         // PAY THIS NOW
+//         orderId: razorpayOrder.id,
+
+//         // FUTURE AUTOPAY
+//         subscriptionId:
+//           razorpaySubscription.id,
+
+//         subscriptionPlanId:
+//           newPlan.razorpayPlanId,
+//       },
+
+//       payment: {
+//         paymentId: payment.paymentId,
+
+//         amount: amountToPay,
+
+//         status: "PENDING",
+//       },
+//     });
+
+//   } catch (error) {
+//     console.error(
+//       "❌ UPGRADE SUBSCRIPTION ERROR:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//     });
+//   }
+// };
+
+
 const upgradeSubscription = async (req, res) => {
   try {
     console.log("\n======================================================");
@@ -1848,7 +2319,7 @@ const upgradeSubscription = async (req, res) => {
     const { tenantId, planId } = req.body;
 
     // ======================================================
-    // 1. VALIDATE REQUEST
+    // 1. VALIDATION
     // ======================================================
 
     if (!tenantId) {
@@ -1894,25 +2365,41 @@ const upgradeSubscription = async (req, res) => {
 
     const currentPlan = currentSubscription.plan;
 
+    console.log("\n📌 CURRENT PLAN");
+
+    console.log("Plan:", currentPlan.name);
+    console.log("Price:", currentPlan.price);
+    console.log("Type:", currentPlan.type);
+    console.log("Level:", currentPlan.planLevel);
+
     // ======================================================
     // 3. GET NEW PLAN
     // ======================================================
 
-    const newPlan = await prisma.plan.findUnique({
-      where: {
-        planId,
-      },
-    });
+    const newPlan =
+      await prisma.plan.findUnique({
+        where: {
+          planId,
+        },
+      });
 
     if (!newPlan) {
       return res.status(404).json({
         success: false,
-        message: "New plan not found",
+        message: "Plan not found",
       });
     }
 
+    console.log("\n📌 NEW PLAN");
+
+    console.log("Plan:", newPlan.name);
+    console.log("Price:", newPlan.price);
+    console.log("Type:", newPlan.type);
+    console.log("Level:", newPlan.planLevel);
+    console.log("Billing:", newPlan.billingCycle);
+
     // ======================================================
-    // 4. VALIDATE NEW PLAN
+    // 4. VALIDATE PLAN
     // ======================================================
 
     if (!newPlan.isActive) {
@@ -1925,19 +2412,19 @@ const upgradeSubscription = async (req, res) => {
     if (newPlan.type !== "PAID") {
       return res.status(400).json({
         success: false,
-        message: "Only paid plans can be upgraded to",
+        message: "You can only upgrade to a paid plan",
       });
     }
 
-    if (currentPlan.planId === newPlan.planId) {
+    if (newPlan.planId === currentPlan.planId) {
       return res.status(400).json({
         success: false,
         message: "You are already using this plan",
       });
     }
 
-    const currentLevel = Number(currentPlan.planLevel);
-    const newLevel = Number(newPlan.planLevel);
+    const currentLevel = Number(currentPlan.planLevel || 0);
+    const newLevel = Number(newPlan.planLevel || 0);
 
     if (newLevel <= currentLevel) {
       return res.status(400).json({
@@ -1957,108 +2444,8 @@ const upgradeSubscription = async (req, res) => {
       });
     }
 
-    const currentPrice = Number(currentPlan.price || 0);
-    const newPrice = Number(newPlan.price || 0);
-
-    console.log("\n📌 CURRENT PLAN");
-    console.log("Plan:", currentPlan.name);
-    console.log("Price:", currentPrice);
-    console.log("Type:", currentPlan.type);
-    console.log("Level:", currentLevel);
-
-    console.log("\n📌 NEW PLAN");
-    console.log("Plan:", newPlan.name);
-    console.log("Price:", newPrice);
-    console.log("Level:", newLevel);
-    console.log("Billing:", newPlan.billingCycle);
-
     // ======================================================
-    // 6. CALCULATE AMOUNT TO PAY NOW
-    // ======================================================
-
-    let unusedCredit = 0;
-    let amountToPay = newPrice;
-
-    let totalDays = 0;
-    let usedDays = 0;
-    let remainingDays = 0;
-
-    // ======================================================
-    // FREE → PAID
-    // ======================================================
-
-    if (currentPlan.type === "FREE") {
-      console.log("\n🆓 FREE → PAID");
-
-      amountToPay = newPrice;
-    }
-
-    // ======================================================
-    // PAID → PAID
-    // ======================================================
-
-    else {
-      console.log("\n💳 PAID → PAID");
-
-      const startDate = new Date(
-        currentSubscription.startDate
-      );
-
-      const endDate = new Date(
-        currentSubscription.endDate
-      );
-
-      const now = new Date();
-
-      const DAY = 1000 * 60 * 60 * 24;
-
-      totalDays = Math.max(
-        1,
-        Math.ceil(
-          (endDate.getTime() - startDate.getTime()) /
-            DAY
-        )
-      );
-
-      usedDays = Math.max(
-        0,
-        Math.ceil(
-          (now.getTime() - startDate.getTime()) /
-            DAY
-        )
-      );
-
-      remainingDays = Math.max(
-        0,
-        Math.ceil(
-          (endDate.getTime() - now.getTime()) /
-            DAY
-        )
-      );
-
-      unusedCredit = Number(
-        (
-          (currentPrice * remainingDays) /
-          totalDays
-        ).toFixed(2)
-      );
-
-      amountToPay = Number(
-        Math.max(
-          1,
-          newPrice - unusedCredit
-        ).toFixed(2)
-      );
-
-      console.log("Total Days:", totalDays);
-      console.log("Used Days:", usedDays);
-      console.log("Remaining Days:", remainingDays);
-      console.log("Unused Credit:", unusedCredit);
-      console.log("Amount To Pay Now:", amountToPay);
-    }
-
-    // ======================================================
-    // 7. PREVENT DUPLICATE PENDING UPGRADE
+    // 6. CHECK FOR EXISTING PENDING UPGRADE
     // ======================================================
 
     const existingPending =
@@ -2068,29 +2455,228 @@ const upgradeSubscription = async (req, res) => {
           planId: newPlan.planId,
           status: "PENDING",
         },
+
+        orderBy: {
+          createdAt: "desc",
+        },
       });
 
     if (existingPending) {
+      console.log("\n⚠️ PENDING UPGRADE ALREADY EXISTS");
+
       return res.status(400).json({
         success: false,
         message:
-          "An upgrade to this plan is already pending",
+          "A pending upgrade already exists. Please complete the payment.",
       });
     }
 
     // ======================================================
-    // 8. CREATE NEW RAZORPAY SUBSCRIPTION
+    // CASE 1: FREE → PAID
+    // ======================================================
+
+    if (currentPlan.type === "FREE") {
+      console.log("\n======================================================");
+      console.log("🆓 FREE → PAID");
+      console.log("======================================================");
+
+      console.log("🔄 CREATING RAZORPAY AUTOPAY SUBSCRIPTION");
+
+      const razorpaySubscription =
+        await razorpay.subscriptions.create({
+          plan_id: newPlan.razorpayPlanId,
+
+          quantity: 1,
+
+          customer_notify: 1,
+
+          total_count:
+            newPlan.billingCycle === "MONTHLY"
+              ? 120
+              : 10,
+
+          notes: {
+            tenantId,
+            oldPlanId: currentPlan.planId,
+            newPlanId: newPlan.planId,
+            upgradeType: "FREE_TO_PAID",
+          },
+        });
+
+      console.log(
+        "✅ Razorpay Subscription Created:",
+        razorpaySubscription.id
+      );
+
+      // ==================================================
+      // CREATE PENDING DB SUBSCRIPTION
+      // ==================================================
+
+      const pendingSubscription =
+        await prisma.subscription.create({
+          data: {
+            tenantId,
+
+            planId: newPlan.planId,
+
+            status: "PENDING",
+
+            billingCycle: newPlan.billingCycle,
+
+            startDate: new Date(),
+
+            endDate: new Date(),
+
+            razorpaySubscriptionId:
+              razorpaySubscription.id,
+          },
+        });
+
+      console.log(
+        "✅ Pending DB subscription created:",
+        pendingSubscription.subscriptionId
+      );
+
+      // ==================================================
+      // RETURN ONLY SUBSCRIPTION ID
+      // ==================================================
+
+      console.log("\n======================================================");
+      console.log("✅ FREE → PAID READY");
+      console.log("======================================================");
+
+      console.log(
+        "Frontend must open Razorpay using subscription_id"
+      );
+
+      return res.status(201).json({
+        success: true,
+
+        message:
+          "Subscription created. Complete Razorpay authorization.",
+
+        upgradeType: "FREE_TO_PAID",
+
+        newPlan: {
+          planId: newPlan.planId,
+          name: newPlan.name,
+          price: Number(newPlan.price),
+          billingCycle: newPlan.billingCycle,
+        },
+
+        razorpay: {
+          type: "SUBSCRIPTION",
+
+          keyId: config.razorpay.keyId,
+
+          subscriptionId:
+            razorpaySubscription.id,
+        },
+      });
+    }
+
+    // ======================================================
+    // CASE 2: PAID → PAID
+    // ======================================================
+
+    console.log("\n======================================================");
+    console.log("💳 PAID → PAID");
+    console.log("======================================================");
+
+    const currentPrice =
+      Number(currentPlan.price || 0);
+
+    const newPrice =
+      Number(newPlan.price || 0);
+
+    // ======================================================
+    // 7. CALCULATE UNUSED CREDIT
+    // ======================================================
+
+    const now = new Date();
+
+    const startDate =
+      new Date(currentSubscription.startDate);
+
+    const endDate =
+      new Date(currentSubscription.endDate);
+
+    const DAY =
+      1000 * 60 * 60 * 24;
+
+    const totalDays =
+      Math.max(
+        1,
+        Math.ceil(
+          (endDate.getTime() -
+            startDate.getTime()) /
+            DAY
+        )
+      );
+
+    const remainingDays =
+      Math.max(
+        0,
+        Math.ceil(
+          (endDate.getTime() -
+            now.getTime()) /
+            DAY
+        )
+      );
+
+    const unusedCredit =
+      Number(
+        (
+          currentPrice *
+          remainingDays /
+          totalDays
+        ).toFixed(2)
+      );
+
+    const amountToPay =
+      Number(
+        Math.max(
+          0,
+          newPrice - unusedCredit
+        ).toFixed(2)
+      );
+
+    console.log("\n💰 UPGRADE CALCULATION");
+
+    console.log("Current Price:", currentPrice);
+    console.log("New Price:", newPrice);
+    console.log("Total Days:", totalDays);
+    console.log("Remaining Days:", remainingDays);
+    console.log("Unused Credit:", unusedCredit);
+    console.log("Amount To Pay:", amountToPay);
+
+    if (amountToPay <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid upgrade amount",
+      });
+    }
+
+    // ======================================================
+    // IMPORTANT
     // ======================================================
     //
-    // IMPORTANT:
+    // A Razorpay Order and a Razorpay Subscription are
+    // two independent payment flows.
     //
-    // This creates the future recurring AutoPay.
+    // The Order collects the prorated upgrade amount NOW.
     //
-    // It does NOT replace the prorated upgrade payment.
+    // The Subscription creates future recurring AutoPay.
     //
     // ======================================================
 
-    console.log("\n🔄 CREATING NEW RAZORPAY AUTOPAY");
+    // ======================================================
+    // 8. CREATE NEW RAZORPAY SUBSCRIPTION
+    // ======================================================
+
+    console.log(
+      "\n🔄 CREATING NEW RAZORPAY AUTOPAY SUBSCRIPTION"
+    );
 
     const razorpaySubscription =
       await razorpay.subscriptions.create({
@@ -2107,19 +2693,15 @@ const upgradeSubscription = async (req, res) => {
 
         notes: {
           tenantId,
-          oldSubscriptionId:
-            currentSubscription.subscriptionId,
           oldPlanId: currentPlan.planId,
           newPlanId: newPlan.planId,
-          upgradeType:
-            currentPlan.type === "FREE"
-              ? "FREE_TO_PAID"
-              : "PAID_TO_PAID",
+          upgradeType: "PAID_TO_PAID",
+          upgradeAmount: String(amountToPay),
         },
       });
 
     console.log(
-      "✅ Razorpay Subscription Created:",
+      "✅ New Razorpay Subscription Created:",
       razorpaySubscription.id
     );
 
@@ -2138,9 +2720,9 @@ const upgradeSubscription = async (req, res) => {
 
           billingCycle: newPlan.billingCycle,
 
-          startDate: new Date(),
+          startDate: now,
 
-          endDate: new Date(),
+          endDate: now,
 
           razorpaySubscriptionId:
             razorpaySubscription.id,
@@ -2153,31 +2735,27 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // 10. CREATE ONE-TIME ORDER FOR AMOUNT NOW
+    // 10. CREATE ONE-TIME RAZORPAY ORDER
     // ======================================================
 
-    console.log("\n💰 CREATING UPGRADE PAYMENT ORDER");
+    console.log(
+      "\n💰 CREATING PRORATED UPGRADE ORDER"
+    );
 
     const razorpayOrder =
       await razorpay.orders.create({
-        amount: Math.round(amountToPay * 100),
+        amount:
+          Math.round(
+            amountToPay * 100
+          ),
 
         currency: "INR",
 
         receipt:
-          `upgrade_${pendingSubscription.subscriptionId}_${Date.now()}`,
+          `upgrade_${tenantId}_${Date.now()}`,
 
         notes: {
           tenantId,
-
-          subscriptionId:
-            pendingSubscription.subscriptionId,
-
-          oldSubscriptionId:
-            currentSubscription.subscriptionId,
-
-          razorpaySubscriptionId:
-            razorpaySubscription.id,
 
           oldPlanId:
             currentPlan.planId,
@@ -2185,16 +2763,11 @@ const upgradeSubscription = async (req, res) => {
           newPlanId:
             newPlan.planId,
 
-          amountToPay:
-            String(amountToPay),
-
-          unusedCredit:
-            String(unusedCredit),
+          pendingSubscriptionId:
+            pendingSubscription.subscriptionId,
 
           upgradeType:
-            currentPlan.type === "FREE"
-              ? "FREE_TO_PAID"
-              : "PAID_TO_PAID",
+            "PAID_TO_PAID",
         },
       });
 
@@ -2204,7 +2777,7 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // 11. CREATE DB PAYMENT
+    // 11. CREATE PAYMENT RECORD
     // ======================================================
 
     const payment =
@@ -2215,7 +2788,8 @@ const upgradeSubscription = async (req, res) => {
           subscriptionId:
             pendingSubscription.subscriptionId,
 
-          amount: String(amountToPay),
+          amount:
+            String(amountToPay),
 
           currency: "INR",
 
@@ -2235,64 +2809,53 @@ const upgradeSubscription = async (req, res) => {
     );
 
     // ======================================================
-    // 12. FINAL RESPONSE
+    // 12. RESPONSE
     // ======================================================
 
     return res.status(201).json({
       success: true,
 
       message:
-        "Upgrade created successfully",
+        "Upgrade payment created",
 
       upgradeType:
-        currentPlan.type === "FREE"
-          ? "FREE_TO_PAID"
-          : "PAID_TO_PAID",
-
-      currentPlan: {
-        planId: currentPlan.planId,
-        name: currentPlan.name,
-        price: currentPrice,
-        billingCycle:
-          currentPlan.billingCycle,
-      },
+        "PAID_TO_PAID",
 
       newPlan: {
         planId: newPlan.planId,
+
         name: newPlan.name,
+
         price: newPrice,
+
         billingCycle:
           newPlan.billingCycle,
       },
 
       upgrade: {
         totalDays,
-        usedDays,
+
         remainingDays,
+
         unusedCredit,
+
         amountToPay,
       },
 
       razorpay: {
-        keyId: config.razorpay.keyId,
+        type: "UPGRADE",
 
-        // PAY THIS NOW
-        orderId: razorpayOrder.id,
+        keyId:
+          config.razorpay.keyId,
 
-        // FUTURE AUTOPAY
+        orderId:
+          razorpayOrder.id,
+
         subscriptionId:
           razorpaySubscription.id,
 
-        subscriptionPlanId:
-          newPlan.razorpayPlanId,
-      },
-
-      payment: {
-        paymentId: payment.paymentId,
-
-        amount: amountToPay,
-
-        status: "PENDING",
+        amount:
+          razorpayOrder.amount,
       },
     });
 
@@ -2304,10 +2867,12 @@ const upgradeSubscription = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message:
+        "Internal server error",
     });
   }
 };
+
 
 // ==========================================================
 // EXPORTS
