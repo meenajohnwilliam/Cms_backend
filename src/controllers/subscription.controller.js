@@ -1506,11 +1506,6 @@ const razorpayWebhook = async (req, res) => {
 };
 
 
-module.exports = {
-  upgradeSubscription,
-  razorpayWebhook,
-};
-
 
 const getCurrentSubscription = async (req, res) => {
   try {
