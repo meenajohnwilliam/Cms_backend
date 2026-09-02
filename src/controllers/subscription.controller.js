@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const config = require("../config/config");
 const { razorpay } = require("../utils/services/razorpay.service");
 
-
+const Razorpay = require("razorpay");
 
 // ============================================================
 // RAZORPAY
