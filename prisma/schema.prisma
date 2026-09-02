@@ -178,7 +178,7 @@ model Subscription {
 
   billingCycle         BillingCycle
   status               SubscriptionStatus @default(ACTIVE)
-
+  planPrice            String?
   startDate            DateTime
   endDate              DateTime
   gracePeriodEndDate   DateTime?
