@@ -206,11 +206,20 @@ const upgradeSubscription = async (req, res) => {
       },
     });
 
+
+
     if (inFlight) {
       console.log(
         "ℹ️ Existing pending upgrade found:",
         inFlight.subscriptionId
       );
+    
+      return res.status(409).json({
+        success: false,
+        message:
+          "A subscription payment is already in progress. Please complete the existing payment.",
+        subscriptionId: inFlight.subscriptionId,
+      });
     }
 
     // ======================================================
