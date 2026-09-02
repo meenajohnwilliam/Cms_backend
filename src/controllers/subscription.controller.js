@@ -91,7 +91,7 @@ const getTotalCount = (
 // GET CURRENT ACTIVE SUBSCRIPTION
 // ============================================================
 
-const getCurrentSubscription = async (
+const getCurrentSubscriptions = async (
   tenantId
 ) => {
   return prisma.subscription.findFirst({
@@ -572,7 +572,7 @@ const upgradeSubscription = async (
     // ========================================================
 
     const currentSubscription =
-      await getCurrentSubscription(
+      await getCurrentSubscriptions(
         tenantId
       );
 
