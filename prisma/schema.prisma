@@ -175,7 +175,7 @@ model Subscription {
 
   tenant               Tenant             @relation(fields: [tenantId], references: [tenantId])
   plan                 Plan               @relation(fields: [planId], references: [planId])
-upgradeType            String?
+
   billingCycle         BillingCycle
   status               SubscriptionStatus @default(ACTIVE)
   planPrice            String?
