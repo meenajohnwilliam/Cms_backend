@@ -2027,6 +2027,15 @@ const razorpayWebhook = async (req, res) => {
 
     // 5. Subscription Cancelled
     if (event === "subscription.cancelled") {
+
+      console.log("================================");
+      console.log("SUBSCRIPTION CANCELLED");
+      console.log("Razorpay ID:", subscriptionData.id);
+      console.log("Status:", subscriptionData.status);
+      console.log("Current End:", subscriptionData.current_end);
+      console.log("Ended At:", subscriptionData.ended_at);
+      console.log("================================");
+    
       await prisma.subscription.update({
         where: {
           subscriptionId: subscription.subscriptionId,
