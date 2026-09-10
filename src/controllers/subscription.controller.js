@@ -1912,7 +1912,13 @@ const razorpayWebhook = async (req, res) => {
       });
     }
 
-    const { event, payload } = req.body;
+    // 2. Convert Buffer to JSON
+    const webhookData = JSON.parse(
+      req.body.toString("utf8")
+    );
+
+    const { event, payload } = webhookData;
+
 
     const subscriptionData = payload.subscription?.entity;
     const paymentData = payload.payment?.entity;

@@ -15,8 +15,8 @@ const router = express.Router();
 
 router.get(
   "/current/:tenantId",
-  // authMiddleware,
-  // roleMiddleware("ADMIN"),
+  authMiddleware,
+  roleMiddleware("ADMIN"),
   getCurrentSubscription
 );
 
