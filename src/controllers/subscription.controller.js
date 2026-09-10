@@ -2014,6 +2014,7 @@ const razorpayWebhook = async (req, res) => {
           await prisma.payment.create({
             data: {
               tenantId: subscription.tenantId,
+              subscriptionId: subscription.subscriptionId,          
               amount: paymentData.amount / 100,
               status: "SUCCESS",
               razorpayPaymentId: paymentData.id,
