@@ -2015,7 +2015,7 @@ const razorpayWebhook = async (req, res) => {
             data: {
               tenantId: subscription.tenantId,
               subscriptionId: subscription.subscriptionId,          
-              amount: paymentData.amount / 100,
+              amount: String(paymentData.amount / 100),
               status: "SUCCESS",
               razorpayPaymentId: paymentData.id,
               razorpaySubscriptionId: subscriptionData.id,
