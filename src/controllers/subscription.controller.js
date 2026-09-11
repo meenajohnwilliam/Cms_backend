@@ -469,6 +469,120 @@ const upgradeSubscription = async (req, res) => {
         "Current Plan End Date:",
         endDate
       );
+
+
+        // 10. CREATE LOCAL PENDING SUBSCRIPTION
+  // ---------------------------------------------------
+
+  // New subscription starts when current subscription ends
+  const newStartDate = new Date(endDate);
+
+  // New subscription END date depends on NEW plan
+  const newEndDate = new Date(endDate);
+
+  if (newPlan.billingCycle === "MONTHLY") {
+    newEndDate.setMonth(
+      newEndDate.getMonth() + 1
+    );
+  } else if (
+    newPlan.billingCycle === "YEARLY"
+  ) {
+    newEndDate.setFullYear(
+      newEndDate.getFullYear() + 1
+    );
+  } else {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Invalid new plan billing cycle",
+    });
+  }
+
+  // ---------------------------------------------------
+  // 11. START AT
+  //
+  // IMPORTANT:
+  //
+  // Current MONTHLY:
+  //     current endDate = next month
+  //
+  // Current YEARLY:
+  //     current endDate = next year
+  //
+  // New subscription starts at current endDate.
+  // ---------------------------------------------------
+
+  const startAt = Math.floor(
+    endDate.getTime() / 1000
+  );
+
+  // ---------------------------------------------------
+  // 12. START DATE LOG
+  // ---------------------------------------------------
+
+  console.log(
+    "=============================================="
+  );
+
+  console.log(
+    "START DATE CHECK"
+  );
+
+  console.log(
+    "=============================================="
+  );
+
+  console.log(
+    "Current Plan:",
+    currentPlan.name
+  );
+
+  console.log(
+    "Current Billing Cycle:",
+    currentPlan.billingCycle
+  );
+
+  console.log(
+    "Current Subscription Start:",
+    startDate.toISOString()
+  );
+
+  console.log(
+    "Current Subscription End:",
+    endDate.toISOString()
+  );
+
+  console.log(
+    "New Subscription Start:",
+    newStartDate.toISOString()
+  );
+
+  console.log(
+    "New Subscription End:",
+    newEndDate.toISOString()
+  );
+
+  console.log(
+    "Razorpay startAt:",
+    startAt
+  );
+
+  console.log(
+    "Razorpay startAt Date:",
+    new Date(
+      startAt * 1000
+    ).toISOString()
+  );
+
+  console.log(
+    "New Plan:",
+    newPlan.name
+  );
+
+  console.log(
+    "New Billing Cycle:",
+    newPlan.billingCycle
+  );
     
       // ---------------------------------------------------
       // Create local pending subscription
@@ -601,69 +715,7 @@ const upgradeSubscription = async (req, res) => {
         );
 
 
-        console.log(
-          "=============================================="
-        );
-      
-        console.log(
-          "START DATE CHECK"
-        );
-      
-        console.log(
-          "=============================================="
-        );
-      
-        console.log(
-          "Current Plan:",
-          currentPlan.name
-        );
-      
-        console.log(
-          "Current Billing Cycle:",
-          currentPlan.billingCycle
-        );
-      
-        console.log(
-          "Current Subscription Start:",
-          startDate.toISOString()
-        );
-      
-        console.log(
-          "Current Subscription End:",
-          endDate.toISOString()
-        );
-      
-        console.log(
-          "New Subscription Start:",
-          newStartDate.toISOString()
-        );
-      
-        console.log(
-          "New Subscription End:",
-          newEndDate.toISOString()
-        );
-      
-        console.log(
-          "Razorpay startAt:",
-          startAt
-        );
-      
-        console.log(
-          "Razorpay startAt Date:",
-          new Date(
-            startAt * 1000
-          ).toISOString()
-        );
-      
-        console.log(
-          "New Plan:",
-          newPlan.name
-        );
-      
-        console.log(
-          "New Billing Cycle:",
-          newPlan.billingCycle
-        );
+        
     
         // -------------------------------------------------
         // CREATE RAZORPAY SUBSCRIPTION
