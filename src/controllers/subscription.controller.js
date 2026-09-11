@@ -297,29 +297,12 @@ const upgradeSubscription = async (req, res) => {
 
     if (currentPlan.type === "PAID") {
       // ---------------------------------------------------
-      // Billing cycle must be same
-      // MONTHLY → MONTHLY
-      // YEARLY → YEARLY
-      // ---------------------------------------------------
-
-      // if (
-      //   currentPlan.billingCycle !==
-      //   newPlan.billingCycle
-      // ) {
-      //   return res.status(400).json({
-      //     success: false,
-      //     message:
-      //       "Upgrade is allowed only within the same billing cycle",
-      //   });
-      // }
-
-      // ---------------------------------------------------
       // New plan should cost more
       // ---------------------------------------------------
-
+    
       const oldPrice = Number(currentPlan.price);
       const newPrice = Number(newPlan.price);
-
+    
       if (
         !Number.isFinite(oldPrice) ||
         !Number.isFinite(newPrice)
@@ -329,7 +312,7 @@ const upgradeSubscription = async (req, res) => {
           message: "Invalid plan price",
         });
       }
-
+    
       if (newPrice <= oldPrice) {
         return res.status(400).json({
           success: false,
@@ -337,11 +320,11 @@ const upgradeSubscription = async (req, res) => {
             "Selected plan must be higher than the current plan",
         });
       }
-
+    
       // ---------------------------------------------------
       // Check existing pending upgrade
       // ---------------------------------------------------
-
+    
       const existingPending =
         await prisma.subscription.findFirst({
           where: {
@@ -358,19 +341,19 @@ const upgradeSubscription = async (req, res) => {
             createdAt: "desc",
           },
         });
-
+    
       if (existingPending?.razorpaySubscriptionId) {
         return res.status(200).json({
           success: true,
           message:
             "Existing upgrade found. Please complete AutoPay authorization.",
-
+    
           subscription: {
             subscriptionId:
               existingPending.subscriptionId,
             status: existingPending.status,
           },
-
+    
           razorpay: {
             keyId: config.razorpay.keyId,
             subscriptionId:
@@ -378,45 +361,56 @@ const upgradeSubscription = async (req, res) => {
           },
         });
       }
-
+    
       // ---------------------------------------------------
-      // Subscription dates
+      // Current subscription dates
       // ---------------------------------------------------
-
+    
       const startDate = new Date(
         currentSubscription.startDate
       );
-
+    
       const endDate = new Date(
         currentSubscription.endDate
       );
-
+    
       const now = new Date();
-
+    
       if (
         Number.isNaN(startDate.getTime()) ||
         Number.isNaN(endDate.getTime())
       ) {
         return res.status(400).json({
           success: false,
-          message:
-            "Invalid current subscription dates",
+          message: "Invalid current subscription dates",
         });
       }
-
+    
       // ---------------------------------------------------
-      // Total days
+      // Current subscription must not already be expired
       // ---------------------------------------------------
-
+    
+      if (endDate <= now) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Current subscription has already expired",
+        });
+      }
+    
+      // ---------------------------------------------------
+      // Total days of CURRENT plan
+      // ---------------------------------------------------
+    
       const totalDays =
         currentPlan.billingCycle === "YEARLY"
           ? 365
           : 30;
-
+    
       // ---------------------------------------------------
       // Used days
       // ---------------------------------------------------
-
+    
       const usedDays = Math.min(
         totalDays,
         Math.max(
@@ -427,32 +421,32 @@ const upgradeSubscription = async (req, res) => {
           )
         )
       );
-
+    
       // ---------------------------------------------------
       // Used amount
       // ---------------------------------------------------
-
+    
       const usedAmount =
         (oldPrice / totalDays) * usedDays;
-
+    
       // ---------------------------------------------------
       // Remaining amount
       // ---------------------------------------------------
-
+    
       const remainingAmount = Math.max(
         0,
         oldPrice - usedAmount
       );
-
+    
       // ---------------------------------------------------
       // Upgrade amount
       // ---------------------------------------------------
-
+    
       const upgradeAmount = Math.max(
         0,
         newPrice - remainingAmount
       );
-
+    
       console.log("----------------------------------------------");
       console.log("PAID → PAID CALCULATION");
       console.log("----------------------------------------------");
@@ -471,11 +465,15 @@ const upgradeSubscription = async (req, res) => {
         "Upgrade Amount:",
         Number(upgradeAmount.toFixed(2))
       );
-
+      console.log(
+        "Current Plan End Date:",
+        endDate
+      );
+    
       // ---------------------------------------------------
       // Create local pending subscription
       // ---------------------------------------------------
-
+    
       const pendingSubscription =
         await prisma.subscription.create({
           data: {
@@ -484,54 +482,92 @@ const upgradeSubscription = async (req, res) => {
             status: "PENDING",
             billingCycle: newPlan.billingCycle,
             planPrice: newPlan.price,
-
-            // Keep current end date.
-            // Webhook can update after successful upgrade.
-            startDate: now,
-            endDate: endDate,
+    
+            // Local subscription starts after
+            // current subscription finishes
+            startDate: endDate,
+            endDate: new Date(
+              endDate.getTime() +
+                (
+                  newPlan.billingCycle === "YEARLY"
+                    ? 365
+                    : 30
+                ) *
+                  24 *
+                  60 *
+                  60 *
+                  1000
+            ),
           },
         });
-
+    
       try {
         // -------------------------------------------------
-        // Razorpay works in PAISE
-        // ₹933 = 93300 paise
+        // Razorpay uses PAISE
+        // ₹5,841 = 584100 paise
         // -------------------------------------------------
-
+    
         const upgradeAmountPaise = Math.round(
           upgradeAmount * 100
         );
-
+    
+        // -------------------------------------------------
+        // IMPORTANT
+        //
+        // Subscription starts at current plan END DATE.
+        //
+        // Therefore:
+        //
+        // NOW:
+        // addon = upgradeAmount
+        //
+        // FUTURE:
+        // newPlan.price
+        // -------------------------------------------------
+    
+        const startAt = Math.floor(
+          endDate.getTime() / 1000
+        );
+    
         // -------------------------------------------------
         // Razorpay subscription
         // -------------------------------------------------
-
+    
         const razorpayData = {
           plan_id: newPlan.razorpayPlanId,
-
+    
           quantity: 1,
-
-          customer_notify: 1,
-
+    
+          customer_notify: true,
+    
           total_count:
             newPlan.billingCycle === "MONTHLY"
               ? 120
               : 10,
-
+    
+          // IMPORTANT
+          // New plan will start only after
+          // current plan ends.
+          start_at: startAt,
+    
           notes: {
             tenantId,
+    
             subscriptionId:
               pendingSubscription.subscriptionId,
+    
             planId: newPlan.planId,
-            type: "PLAN_UPGRADE",
+    
             oldPlanId: currentPlan.planId,
+    
+            type: "PLAN_UPGRADE",
           },
         };
-
+    
         // -------------------------------------------------
-        // Add upgrade difference
+        // ONLY UPGRADE AMOUNT IS CHARGED NOW
         // -------------------------------------------------
-
+    
         if (upgradeAmountPaise > 0) {
           razorpayData.addons = [
             {
@@ -543,19 +579,40 @@ const upgradeSubscription = async (req, res) => {
             },
           ];
         }
-
+    
+        console.log("----------------------------------------------");
+        console.log("RAZORPAY SUBSCRIPTION");
+        console.log("----------------------------------------------");
+        console.log(
+          "Upgrade Amount:",
+          upgradeAmount
+        );
+        console.log(
+          "Upgrade Amount Paise:",
+          upgradeAmountPaise
+        );
+        console.log(
+          "Subscription Start At:",
+          startAt
+        );
+        console.log(
+          "Subscription Start Date:",
+          endDate
+        );
+    
         // -------------------------------------------------
-        // Create Razorpay subscription
+        // CREATE RAZORPAY SUBSCRIPTION
         // -------------------------------------------------
-
-        const razorpaySubscription = await razorpay.subscriptions.create(
+    
+        const razorpaySubscription =
+          await razorpay.subscriptions.create(
             razorpayData
           );
-
+    
         // -------------------------------------------------
         // Save Razorpay subscription ID
         // -------------------------------------------------
-
+    
         const updatedSubscription =
           await prisma.subscription.update({
             where: {
@@ -567,17 +624,17 @@ const upgradeSubscription = async (req, res) => {
                 razorpaySubscription.id,
             },
           });
-
+    
         // -------------------------------------------------
         // RESPONSE
         // -------------------------------------------------
-
+    
         return res.status(201).json({
           success: true,
-
+    
           message:
             "Upgrade subscription created. Please complete AutoPay authorization.",
-
+    
           currentPlan: {
             planId: currentPlan.planId,
             name: currentPlan.name,
@@ -585,7 +642,7 @@ const upgradeSubscription = async (req, res) => {
             billingCycle:
               currentPlan.billingCycle,
           },
-
+    
           newPlan: {
             planId: newPlan.planId,
             name: newPlan.name,
@@ -593,34 +650,40 @@ const upgradeSubscription = async (req, res) => {
             billingCycle:
               newPlan.billingCycle,
           },
-
+    
           calculation: {
             usedDays,
-
+    
             usedAmount: Number(
               usedAmount.toFixed(2)
             ),
-
+    
             remainingAmount: Number(
               remainingAmount.toFixed(2)
             ),
-
+    
             upgradeAmount: Number(
               upgradeAmount.toFixed(2)
             ),
           },
-
+    
           subscription: {
             subscriptionId:
               updatedSubscription.subscriptionId,
+    
             status:
               updatedSubscription.status,
+    
+            startDate: endDate,
           },
-
+    
           razorpay: {
             keyId: config.razorpay.keyId,
+    
             subscriptionId:
               razorpaySubscription.id,
+    
+            startAt,
           },
         });
       } catch (error) {
@@ -628,8 +691,11 @@ const upgradeSubscription = async (req, res) => {
           "Razorpay PAID → PAID error:",
           error
         );
-
+    
+        // -------------------------------------------------
         // Delete failed pending subscription
+        // -------------------------------------------------
+    
         await prisma.subscription
           .delete({
             where: {
@@ -637,8 +703,13 @@ const upgradeSubscription = async (req, res) => {
                 pendingSubscription.subscriptionId,
             },
           })
-          .catch(() => {});
-
+          .catch((deleteError) => {
+            console.error(
+              "Failed to delete pending subscription:",
+              deleteError
+            );
+          });
+    
         return res.status(502).json({
           success: false,
           message:
