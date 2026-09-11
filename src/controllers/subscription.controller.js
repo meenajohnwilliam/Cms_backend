@@ -465,7 +465,7 @@ if (currentPlan.type === "PAID") {
         amountInPaise,
     },
   });
-}}
+}
 
     return res.status(400).json({
       success: false,
