@@ -599,6 +599,71 @@ const upgradeSubscription = async (req, res) => {
           "Subscription Start Date:",
           endDate
         );
+
+
+        console.log(
+          "=============================================="
+        );
+      
+        console.log(
+          "START DATE CHECK"
+        );
+      
+        console.log(
+          "=============================================="
+        );
+      
+        console.log(
+          "Current Plan:",
+          currentPlan.name
+        );
+      
+        console.log(
+          "Current Billing Cycle:",
+          currentPlan.billingCycle
+        );
+      
+        console.log(
+          "Current Subscription Start:",
+          startDate.toISOString()
+        );
+      
+        console.log(
+          "Current Subscription End:",
+          endDate.toISOString()
+        );
+      
+        console.log(
+          "New Subscription Start:",
+          newStartDate.toISOString()
+        );
+      
+        console.log(
+          "New Subscription End:",
+          newEndDate.toISOString()
+        );
+      
+        console.log(
+          "Razorpay startAt:",
+          startAt
+        );
+      
+        console.log(
+          "Razorpay startAt Date:",
+          new Date(
+            startAt * 1000
+          ).toISOString()
+        );
+      
+        console.log(
+          "New Plan:",
+          newPlan.name
+        );
+      
+        console.log(
+          "New Billing Cycle:",
+          newPlan.billingCycle
+        );
     
         // -------------------------------------------------
         // CREATE RAZORPAY SUBSCRIPTION
