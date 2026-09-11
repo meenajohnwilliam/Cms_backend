@@ -302,16 +302,16 @@ const upgradeSubscription = async (req, res) => {
       // YEARLY → YEARLY
       // ---------------------------------------------------
 
-      if (
-        currentPlan.billingCycle !==
-        newPlan.billingCycle
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Upgrade is allowed only within the same billing cycle",
-        });
-      }
+      // if (
+      //   currentPlan.billingCycle !==
+      //   newPlan.billingCycle
+      // ) {
+      //   return res.status(400).json({
+      //     success: false,
+      //     message:
+      //       "Upgrade is allowed only within the same billing cycle",
+      //   });
+      // }
 
       // ---------------------------------------------------
       // New plan should cost more
@@ -548,8 +548,7 @@ const upgradeSubscription = async (req, res) => {
         // Create Razorpay subscription
         // -------------------------------------------------
 
-        const razorpaySubscription =
-          await razorpay.subscriptions.create(
+        const razorpaySubscription = await razorpay.subscriptions.create(
             razorpayData
           );
 
