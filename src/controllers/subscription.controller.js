@@ -474,8 +474,7 @@ const upgradeSubscription = async (req, res) => {
         // 10. CREATE LOCAL PENDING SUBSCRIPTION
   // ---------------------------------------------------
 
-  // New subscription starts when current subscription ends
-  const newStartDate = new Date(endDate);
+ 
 
   // New subscription END date depends on NEW plan
   const newEndDate = new Date(endDate);
@@ -554,7 +553,7 @@ const upgradeSubscription = async (req, res) => {
 
   console.log(
     "New Subscription Start:",
-    newStartDate.toISOString()
+    endDate.toISOString()
   );
 
   console.log(
@@ -600,18 +599,7 @@ const upgradeSubscription = async (req, res) => {
             // Local subscription starts after
             // current subscription finishes
             startDate: endDate,
-            endDate: new Date(
-              endDate.getTime() +
-                (
-                  newPlan.billingCycle === "YEARLY"
-                    ? 365
-                    : 30
-                ) *
-                  24 *
-                  60 *
-                  60 *
-                  1000
-            ),
+            endDate: newEndDate,
           },
         });
     
@@ -638,11 +626,7 @@ const upgradeSubscription = async (req, res) => {
         // FUTURE:
         // newPlan.price
         // -------------------------------------------------
-    
-        const startAt = Math.floor(
-          new Date(currentSubscription.endDate).getTime() / 1000
-        );
-    
+
         // -------------------------------------------------
         // Razorpay subscription
         // -------------------------------------------------
