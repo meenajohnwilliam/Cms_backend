@@ -526,7 +526,7 @@ const upgradeSubscription = async (req, res) => {
         // -------------------------------------------------
     
         const startAt = Math.floor(
-          endDate.getTime() / 1000
+          new Date(currentSubscription.endDate).getTime() / 1000
         );
     
         // -------------------------------------------------
