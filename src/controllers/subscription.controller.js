@@ -521,6 +521,10 @@ if (newPlan.billingCycle === "MONTHLY") {
   const startAt = Math.floor(
     newStartDate.getTime() / 1000
   );
+
+  const razorpayStartAt = Math.floor(
+    endDate.getTime() / 1000
+  );
   // ---------------------------------------------------
   // 12. START DATE LOG
   // ---------------------------------------------------
@@ -635,9 +639,7 @@ if (newPlan.billingCycle === "MONTHLY") {
         // -------------------------------------------------
         // Razorpay subscription
         // -------------------------------------------------
-        const razorpayStartAt = Math.floor(
-          endDate.getTime() / 1000
-        );
+       
         const razorpayData = {
           plan_id: newPlan.razorpayPlanId,
     
