@@ -895,6 +895,42 @@ const razorpayWebhook = async (req, res) => {
       });
     }
 
+    if (event === "subscription.authenticated") {
+      const startDate = new Date(
+        subscriptionData.current_start * 1000
+      );
+    
+      const endDate = new Date(
+        subscriptionData.current_end * 1000
+      );
+    
+      // Cancel old active subscription
+      await prisma.subscription.updateMany({
+        where: {
+          tenantId: subscription.tenantId,
+          status: "ACTIVE",
+          NOT: {
+            subscriptionId: subscription.subscriptionId,
+          },
+        },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+    
+      // Activate new subscription
+      await prisma.subscription.update({
+        where: {
+          subscriptionId: subscription.subscriptionId,
+        },
+        data: {
+          status: "ACTIVE",
+          startDate,
+          endDate,
+        },
+      });
+    }
+
     // 3. Subscription Activated
     if (event === "subscription.activated") {
       const startDate = new Date(
