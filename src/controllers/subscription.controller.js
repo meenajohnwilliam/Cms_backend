@@ -481,13 +481,13 @@ const upgradeSubscription = async (req, res) => {
 
   if (newPlan.billingCycle === "MONTHLY") {
     newEndDate.setMonth(
-      newEndDate.getMonth() + 1
+      newEndDate.getMonth()
     );
   } else if (
     newPlan.billingCycle === "YEARLY"
   ) {
     newEndDate.setFullYear(
-      newEndDate.getFullYear() + 1
+      newEndDate.getFullYear()
     );
   } else {
     return res.status(400).json({
