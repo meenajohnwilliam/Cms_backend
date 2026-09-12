@@ -875,6 +875,8 @@ const razorpayWebhook = async (req, res) => {
     const subscriptionData = payload.subscription?.entity;
     const paymentData = payload.payment?.entity;
 
+    console.log(subscriptionData,"joooko")
+
     if (!subscriptionData) {
       return res.status(200).json({
         success: true,
