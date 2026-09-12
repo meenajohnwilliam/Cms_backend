@@ -896,6 +896,7 @@ const razorpayWebhook = async (req, res) => {
     }
 
     if (event === "subscription.authenticated") {
+
       const startDate = new Date(
         subscriptionData.current_start * 1000
       );
@@ -904,21 +905,68 @@ const razorpayWebhook = async (req, res) => {
         subscriptionData.current_end * 1000
       );
     
-      // Cancel old active subscription
-      await prisma.subscription.updateMany({
-        where: {
-          tenantId: subscription.tenantId,
-          status: "ACTIVE",
-          NOT: {
-            subscriptionId: subscription.subscriptionId,
-          },
-        },
-        data: {
-          status: "CANCELLED",
-        },
-      });
+      // ---------------------------------------------
+      // FIND OLD ACTIVE SUBSCRIPTION
+      // ---------------------------------------------
     
-      // Activate new subscription
+      const oldSubscription =
+        await prisma.subscription.findFirst({
+          where: {
+            tenantId: subscription.tenantId,
+            status: "ACTIVE",
+            NOT: {
+              subscriptionId: subscription.subscriptionId,
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+    
+      // ---------------------------------------------
+      // CANCEL OLD RAZORPAY SUBSCRIPTION
+      // ---------------------------------------------
+    
+      if (oldSubscription?.razorpaySubscriptionId) {
+    
+        await razorpay.subscriptions.cancel(
+          oldSubscription.razorpaySubscriptionId,
+          {
+            cancel_at_cycle_end: false,
+          }
+        );
+    
+        console.log(
+          "Old Razorpay Subscription Cancelled:",
+          oldSubscription.razorpaySubscriptionId
+        );
+      }
+    
+      // ---------------------------------------------
+      // CANCEL OLD LOCAL SUBSCRIPTION
+      // ---------------------------------------------
+    
+      if (oldSubscription) {
+    
+        await prisma.subscription.update({
+          where: {
+            subscriptionId: oldSubscription.subscriptionId,
+          },
+          data: {
+            status: "CANCELLED",
+          },
+        });
+    
+        console.log(
+          "Old Local Subscription Cancelled:",
+          oldSubscription.subscriptionId
+        );
+      }
+    
+      // ---------------------------------------------
+      // ACTIVATE NEW LOCAL SUBSCRIPTION
+      // ---------------------------------------------
+    
       await prisma.subscription.update({
         where: {
           subscriptionId: subscription.subscriptionId,
@@ -929,33 +977,86 @@ const razorpayWebhook = async (req, res) => {
           endDate,
         },
       });
+    
+      console.log(
+        "New Subscription Activated:",
+        subscription.subscriptionId
+      );
     }
 
     // 3. Subscription Activated
     if (event === "subscription.activated") {
+
       const startDate = new Date(
         subscriptionData.current_start * 1000
       );
-
+    
       const endDate = new Date(
         subscriptionData.current_end * 1000
       );
-
-      // Cancel old active subscription
-      await prisma.subscription.updateMany({
-        where: {
-          tenantId: subscription.tenantId,
-          status: "ACTIVE",
-          NOT: {
-            subscriptionId: subscription.subscriptionId,
+    
+      // ---------------------------------------------
+      // FIND OLD ACTIVE SUBSCRIPTION
+      // ---------------------------------------------
+    
+      const oldSubscription =
+        await prisma.subscription.findFirst({
+          where: {
+            tenantId: subscription.tenantId,
+            status: "ACTIVE",
+            NOT: {
+              subscriptionId: subscription.subscriptionId,
+            },
           },
-        },
-        data: {
-          status: "CANCELLED",
-        },
-      });
-
-      // Activate new subscription
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+    
+      // ---------------------------------------------
+      // CANCEL OLD RAZORPAY SUBSCRIPTION
+      // ---------------------------------------------
+    
+      if (oldSubscription?.razorpaySubscriptionId) {
+    
+        await razorpay.subscriptions.cancel(
+          oldSubscription.razorpaySubscriptionId,
+          {
+            cancel_at_cycle_end: false,
+          }
+        );
+    
+        console.log(
+          "Old Razorpay Subscription Cancelled:",
+          oldSubscription.razorpaySubscriptionId
+        );
+      }
+    
+      // ---------------------------------------------
+      // CANCEL OLD LOCAL SUBSCRIPTION
+      // ---------------------------------------------
+    
+      if (oldSubscription) {
+    
+        await prisma.subscription.update({
+          where: {
+            subscriptionId: oldSubscription.subscriptionId,
+          },
+          data: {
+            status: "CANCELLED",
+          },
+        });
+    
+        console.log(
+          "Old Local Subscription Cancelled:",
+          oldSubscription.subscriptionId
+        );
+      }
+    
+      // ---------------------------------------------
+      // ACTIVATE NEW SUBSCRIPTION
+      // ---------------------------------------------
+    
       await prisma.subscription.update({
         where: {
           subscriptionId: subscription.subscriptionId,
@@ -966,6 +1067,11 @@ const razorpayWebhook = async (req, res) => {
           endDate,
         },
       });
+    
+      console.log(
+        "New Subscription Activated:",
+        subscription.subscriptionId
+      );
     }
 
     // 4. Monthly Payment Successful
