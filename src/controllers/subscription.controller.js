@@ -939,17 +939,71 @@ const razorpayWebhook = async (req, res) => {
         success: true,
       });
     }
-
     if (event === "subscription.authenticated") {
-      // const startDate = new Date(
-      //   subscriptionData.current_start * 1000
-      // );
+
+      // ---------------------------------------------------
+      // Find old ACTIVE subscriptions
+      // ---------------------------------------------------
     
-      // const endDate = new Date(
-      //   subscriptionData.current_end * 1000
-      // );
+      const oldSubscriptions =
+        await prisma.subscription.findMany({
+          where: {
+            tenantId: subscription.tenantId,
+            status: "ACTIVE",
+            NOT: {
+              subscriptionId: subscription.subscriptionId,
+            },
+          },
+        });
     
-      // Cancel old active subscription
+      // ---------------------------------------------------
+      // Cancel old Razorpay subscriptions
+      // ---------------------------------------------------
+    
+      for (const oldSubscription of oldSubscriptions) {
+    
+        if (!oldSubscription.razorpaySubscriptionId) {
+          continue;
+        }
+    
+        try {
+    
+          console.log(
+            "Cancelling old Razorpay subscription:",
+            oldSubscription.razorpaySubscriptionId
+          );
+    
+          await razorpay.subscriptions.cancel(
+            oldSubscription.razorpaySubscriptionId,
+            {
+              cancel_at_cycle_end: false,
+            }
+          );
+    
+          console.log(
+            "Old Razorpay subscription cancelled:",
+            oldSubscription.razorpaySubscriptionId
+          );
+    
+        } catch (error) {
+    
+          console.error(
+            "Failed to cancel old Razorpay subscription:",
+            error
+          );
+    
+          return res.status(500).json({
+            success: false,
+            message:
+              "Failed to cancel old Razorpay subscription",
+          });
+        }
+      }
+    
+      // ---------------------------------------------------
+      // Cancel old LOCAL subscriptions
+      // ---------------------------------------------------
+    
       await prisma.subscription.updateMany({
         where: {
           tenantId: subscription.tenantId,
@@ -963,56 +1017,122 @@ const razorpayWebhook = async (req, res) => {
         },
       });
     
-      // Activate new subscription
+      // ---------------------------------------------------
+      // Activate NEW subscription
+      // ---------------------------------------------------
+    
       await prisma.subscription.update({
         where: {
           subscriptionId: subscription.subscriptionId,
         },
         data: {
           status: "ACTIVE",
-          // startDate,
-          // endDate,
         },
       });
+    
+      console.log(
+        "New subscription activated:",
+        subscription.subscriptionId
+      );
     }
 
-    // 3. Subscription Activated
-    if (event === "subscription.activated") {
-      // const startDate = new Date(
-      //   subscriptionData.current_start * 1000
-      // );
+// 3. Subscription Activated
+if (event === "subscription.activated") {
 
-      // const endDate = new Date(
-      //   subscriptionData.current_end * 1000
-      // );
+  // ---------------------------------------------------
+  // Find old ACTIVE subscriptions
+  // ---------------------------------------------------
 
-      // Cancel old active subscription
-      await prisma.subscription.updateMany({
-        where: {
-          tenantId: subscription.tenantId,
-          status: "ACTIVE",
-          NOT: {
-            subscriptionId: subscription.subscriptionId,
-          },
-        },
-        data: {
-          status: "CANCELLED",
-        },
-      });
-
-      // Activate new subscription
-      await prisma.subscription.update({
-        where: {
+  const oldSubscriptions =
+    await prisma.subscription.findMany({
+      where: {
+        tenantId: subscription.tenantId,
+        status: "ACTIVE",
+        NOT: {
           subscriptionId: subscription.subscriptionId,
         },
-        data: {
-          status: "ACTIVE",
-          // startDate,
-          // endDate,
-        },
-      });
+      },
+    });
+
+  // ---------------------------------------------------
+  // Cancel old Razorpay subscriptions
+  // ---------------------------------------------------
+
+  for (const oldSubscription of oldSubscriptions) {
+
+    if (!oldSubscription.razorpaySubscriptionId) {
+      continue;
     }
 
+    try {
+
+      console.log(
+        "Cancelling old Razorpay subscription:",
+        oldSubscription.razorpaySubscriptionId
+      );
+
+      await razorpay.subscriptions.cancel(
+        oldSubscription.razorpaySubscriptionId,
+        {
+          cancel_at_cycle_end: false,
+        }
+      );
+
+      console.log(
+        "Old Razorpay subscription cancelled:",
+        oldSubscription.razorpaySubscriptionId
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Old Razorpay subscription cancellation failed:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Failed to cancel old Razorpay subscription",
+      });
+    }
+  }
+
+  // ---------------------------------------------------
+  // Cancel old LOCAL subscriptions
+  // ---------------------------------------------------
+
+  await prisma.subscription.updateMany({
+    where: {
+      tenantId: subscription.tenantId,
+      status: "ACTIVE",
+      NOT: {
+        subscriptionId: subscription.subscriptionId,
+      },
+    },
+    data: {
+      status: "CANCELLED",
+    },
+  });
+
+  // ---------------------------------------------------
+  // Activate new LOCAL subscription
+  // ---------------------------------------------------
+
+  await prisma.subscription.update({
+    where: {
+      subscriptionId: subscription.subscriptionId,
+    },
+    data: {
+      status: "ACTIVE",
+    },
+  });
+
+  console.log(
+    "New subscription activated:",
+    subscription.subscriptionId
+  );
+}
     // 4. Monthly Payment Successful
     if (event === "subscription.charged") {
       const startDate = new Date(
