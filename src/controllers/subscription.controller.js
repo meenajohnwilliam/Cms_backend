@@ -604,10 +604,10 @@ if (newPlan.billingCycle === "MONTHLY") {
     newEndDate.toISOString()
   );
 
-  console.log(
-    "Razorpay startAt:",
-    startAt
-  );
+  // console.log(
+  //   "Razorpay startAt:",
+  //   startAt
+  // );
 
   console.log(
     "Razorpay startAt Date:",
@@ -827,7 +827,7 @@ if (newPlan.billingCycle === "MONTHLY") {
             subscriptionId:
               razorpaySubscription.id,
     
-            startAt,
+            startAt:razorpayStartAt,
           },
         });
       } catch (error) {
