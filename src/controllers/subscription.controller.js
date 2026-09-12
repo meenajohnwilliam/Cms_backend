@@ -518,13 +518,47 @@ if (newPlan.billingCycle === "MONTHLY") {
   // New subscription starts at current endDate.
   // ---------------------------------------------------
 
-  const startAt = Math.floor(
-    newStartDate.getTime() / 1000
-  );
+   // ===================================================
+      // RAZORPAY START DATE
+      // ===================================================
 
-  const razorpayStartAt = Math.floor(
-    endDate.getTime() / 1000
-  );
+      let razorpayStartDate;
+
+      // SPECIAL CASE:
+      // MONTHLY → YEARLY
+      //
+      // Original:
+      // 12 Sep 2026
+      //
+      // New Razorpay start:
+      // 12 Sep 2027
+      //
+      // This keeps the yearly anniversary.
+
+      if (
+        currentPlan.billingCycle === "MONTHLY" &&
+        newPlan.billingCycle === "YEARLY"
+      ) {
+        razorpayStartDate = new Date(startDate);
+
+        razorpayStartDate.setFullYear(
+          razorpayStartDate.getFullYear() + 1
+        );
+      } else {
+        // Existing behavior for other upgrades
+        razorpayStartDate = new Date(endDate);
+      }
+
+      const razorpayStartAt = Math.floor(
+        razorpayStartDate.getTime() / 1000
+      );
+
+
+  // const startAt = Math.floor(
+  //   newStartDate.getTime() / 1000
+  // );
+
+
   // ---------------------------------------------------
   // 12. START DATE LOG
   // ---------------------------------------------------
