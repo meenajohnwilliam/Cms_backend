@@ -474,29 +474,68 @@ const upgradeSubscription = async (req, res) => {
         // 10. CREATE LOCAL PENDING SUBSCRIPTION
   // ---------------------------------------------------
 
- 
+ // ---------------------------------------------------
+// NEW SUBSCRIPTION DATES
+// ---------------------------------------------------
 
-  // New subscription END date depends on NEW plan
-  const newEndDate = new Date(endDate);
+let newStartDate;
+let newEndDate;
 
-  if (newPlan.billingCycle === "MONTHLY") {
-    newEndDate.setMonth(
-      newEndDate.getMonth()
-    );
-  } else if (
-    newPlan.billingCycle === "YEARLY"
-  ) {
-    newEndDate.setFullYear(
-      newEndDate.getFullYear()
-    );
-  } else {
-    return res.status(400).json({
-      success: false,
-      message:
-        "Invalid new plan billing cycle",
-    });
-  }
+// ---------------------------------------------------
+// SAME BILLING CYCLE
+// Keep the SAME start and end dates
+// ---------------------------------------------------
 
+if (
+  currentPlan.billingCycle === "MONTHLY" &&
+  newPlan.billingCycle === "MONTHLY"
+) {
+
+  newStartDate = new Date(startDate);
+  newEndDate = new Date(endDate);
+
+} else if (
+  currentPlan.billingCycle === "YEARLY" &&
+  newPlan.billingCycle === "YEARLY"
+) {
+
+  newStartDate = new Date(startDate);
+  newEndDate = new Date(endDate);
+
+}
+
+// ---------------------------------------------------
+// MONTHLY → YEARLY
+// New yearly plan starts when old monthly plan ends
+// ---------------------------------------------------
+
+else if (
+  currentPlan.billingCycle === "MONTHLY" &&
+  newPlan.billingCycle === "YEARLY"
+) {
+
+  newStartDate = new Date(endDate);
+
+  newEndDate = new Date(newStartDate);
+
+  newEndDate.setFullYear(
+    newEndDate.getFullYear() + 1
+  );
+
+}
+
+// ---------------------------------------------------
+// INVALID BILLING CYCLE
+// ---------------------------------------------------
+
+else {
+
+  return res.status(400).json({
+    success: false,
+    message: "Invalid billing cycle upgrade",
+  });
+
+}
   // ---------------------------------------------------
   // 11. START AT
   //
@@ -512,7 +551,7 @@ const upgradeSubscription = async (req, res) => {
   // ---------------------------------------------------
 
   const startAt = Math.floor(
-    endDate.getTime() / 1000
+    newStartDate.getTime() / 1000
   );
 
   // ---------------------------------------------------
@@ -553,9 +592,8 @@ const upgradeSubscription = async (req, res) => {
 
   console.log(
     "New Subscription Start:",
-    endDate.toISOString()
+    newStartDate.toISOString()
   );
-
   console.log(
     "New Subscription End:",
     newEndDate.toISOString()
@@ -598,7 +636,7 @@ const upgradeSubscription = async (req, res) => {
     
             // Local subscription starts after
             // current subscription finishes
-            startDate: endDate,
+            startDate: newStartDate,
             endDate: newEndDate,
           },
         });
@@ -651,8 +689,7 @@ const upgradeSubscription = async (req, res) => {
           notes: {
             tenantId,
     
-            subscriptionId:
-              pendingSubscription.subscriptionId,
+            subscriptionId:  pendingSubscription.subscriptionId,
     
             planId: newPlan.planId,
     
@@ -695,7 +732,7 @@ const upgradeSubscription = async (req, res) => {
         );
         console.log(
           "Subscription Start Date:",
-          endDate
+          newStartDate
         );
 
 
@@ -771,10 +808,10 @@ const upgradeSubscription = async (req, res) => {
           subscription: {
             subscriptionId:
               updatedSubscription.subscriptionId,
-    
+          
             status:
               updatedSubscription.status,
-    
+          
             startDate: endDate,
           },
     
