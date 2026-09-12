@@ -473,66 +473,34 @@ const upgradeSubscription = async (req, res) => {
 
         // 10. CREATE LOCAL PENDING SUBSCRIPTION
   // ---------------------------------------------------
-
- // ---------------------------------------------------
+// ---------------------------------------------------
 // NEW SUBSCRIPTION DATES
 // ---------------------------------------------------
 
-let newStartDate;
-let newEndDate;
-
 // ---------------------------------------------------
-// SAME BILLING CYCLE
-// Keep the SAME start and end dates
+// NEW SUBSCRIPTION DATES
 // ---------------------------------------------------
 
-if (
-  currentPlan.billingCycle === "MONTHLY" &&
-  newPlan.billingCycle === "MONTHLY"
-) {
+const newStartDate = new Date(startDate);
+const newEndDate = new Date(startDate);
 
-  newStartDate = new Date(startDate);
-  newEndDate = new Date(endDate);
+if (newPlan.billingCycle === "MONTHLY") {
 
-} else if (
-  currentPlan.billingCycle === "YEARLY" &&
-  newPlan.billingCycle === "YEARLY"
-) {
+  newEndDate.setMonth(
+    newEndDate.getMonth() + 1
+  );
 
-  newStartDate = new Date(startDate);
-  newEndDate = new Date(endDate);
-
-}
-
-// ---------------------------------------------------
-// MONTHLY → YEARLY
-// New yearly plan starts when old monthly plan ends
-// ---------------------------------------------------
-
-else if (
-  currentPlan.billingCycle === "MONTHLY" &&
-  newPlan.billingCycle === "YEARLY"
-) {
-
-  newStartDate = new Date(endDate);
-
-  newEndDate = new Date(newStartDate);
+} else if (newPlan.billingCycle === "YEARLY") {
 
   newEndDate.setFullYear(
     newEndDate.getFullYear() + 1
   );
 
-}
-
-// ---------------------------------------------------
-// INVALID BILLING CYCLE
-// ---------------------------------------------------
-
-else {
+} else {
 
   return res.status(400).json({
     success: false,
-    message: "Invalid billing cycle upgrade",
+    message: "Invalid new plan billing cycle",
   });
 
 }
@@ -553,7 +521,6 @@ else {
   const startAt = Math.floor(
     newStartDate.getTime() / 1000
   );
-
   // ---------------------------------------------------
   // 12. START DATE LOG
   // ---------------------------------------------------
@@ -607,7 +574,7 @@ else {
   console.log(
     "Razorpay startAt Date:",
     new Date(
-      startAt * 1000
+      razorpayStartAt * 1000
     ).toISOString()
   );
 
@@ -668,7 +635,9 @@ else {
         // -------------------------------------------------
         // Razorpay subscription
         // -------------------------------------------------
-    
+        const razorpayStartAt = Math.floor(
+          endDate.getTime() / 1000
+        );
         const razorpayData = {
           plan_id: newPlan.razorpayPlanId,
     
@@ -684,7 +653,7 @@ else {
           // IMPORTANT
           // New plan will start only after
           // current plan ends.
-          start_at: startAt,
+          start_at: razorpayStartAt,
     
           notes: {
             tenantId,
@@ -727,8 +696,8 @@ else {
           upgradeAmountPaise
         );
         console.log(
-          "Subscription Start At:",
-          startAt
+          "Razorpay Subscription Start At:",
+          razorpayStartAt
         );
         console.log(
           "Subscription Start Date:",
@@ -812,7 +781,8 @@ else {
             status:
               updatedSubscription.status,
           
-            startDate: endDate,
+              startDate: newStartDate,
+              endDate: newEndDate,
           },
     
           razorpay: {
