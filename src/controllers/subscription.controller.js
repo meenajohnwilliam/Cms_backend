@@ -388,7 +388,20 @@ const upgradeSubscription = async (req, res) => {
           success: true,
           message:
             "Existing upgrade found. Please complete AutoPay authorization.",
-    
+
+          currentPlan: {
+            planId: currentPlan.planId,
+            name: currentPlan.name,
+            type: currentPlan.type,
+          },
+
+          newPlan: {
+            planId: newPlan.planId,
+            name: newPlan.name,
+            price: Number(newPlan.price),
+            billingCycle: newPlan.billingCycle,
+          },
+
           subscription: {
             subscriptionId:
               existingPending.subscriptionId,
