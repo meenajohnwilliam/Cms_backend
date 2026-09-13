@@ -39,6 +39,8 @@ app.post("/api/v1/subscriptions/razorpay/webhook",
   );
 
 
+
+
 app.use(express.json());
 
 
@@ -63,6 +65,7 @@ app.use("/api/v1/forms/submissions",formSubmissionRoutes);
 
 
 
+const prisma = require("./src/config/prisma")
 
 
 
@@ -70,14 +73,15 @@ app.use("/api/v1/forms/submissions",formSubmissionRoutes);
 
 
 
+app.get("/api/v1/health",async (req, res) => {
 
-app.get("/api/v1/health", (req, res) => {
     res.json({
         status: "OK",
         uptime: `${process.uptime()} seconds`,
         timestamp: new Date()
     });
 });
+
 
 app.listen(8003,()=>{
     console.log("Server Started at port:8003")

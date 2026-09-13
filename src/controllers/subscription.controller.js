@@ -4,8 +4,49 @@ const prisma = require("../config/prisma");
 const crypto = require("crypto");
 const config = require("../config/config");
 const { razorpay } = require("../utils/services/razorpay.service");
+const axios = require("axios");
 
+const cancelRazorpaySubscription = async (subscriptionId) => {
+  try {
 
+    console.log(
+      "Cancelling Razorpay subscription:",
+      subscriptionId
+    );
+
+    const response = await axios.post(
+      `https://api.razorpay.com/v1/subscriptions/${subscriptionId}/cancel`,
+      {
+        cancel_at_cycle_end: false,
+      },
+      {
+        auth: {
+          username: config.razorpay.keyId,
+          password: config.razorpay.keySecret,
+        },
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log(
+      "RAZORPAY CANCEL RESPONSE:",
+      response.data
+    );
+
+    return response.data;
+
+  } catch (error) {
+
+    console.error(
+      "RAZORPAY CANCEL ERROR:",
+      error.response?.data || error.message
+    );
+
+    throw error;
+  }
+};
 
 
 
@@ -885,11 +926,6 @@ if (newPlan.billingCycle === "MONTHLY") {
 };
 
 
-
-
-
-
-
 const razorpayWebhook = async (req, res) => {
   try {
     // 1. Verify webhook
@@ -939,12 +975,9 @@ const razorpayWebhook = async (req, res) => {
         success: true,
       });
     }
+
     if (event === "subscription.authenticated") {
 
-      // ---------------------------------------------------
-      // Find old ACTIVE subscriptions
-      // ---------------------------------------------------
-    
       const oldSubscriptions =
         await prisma.subscription.findMany({
           where: {
@@ -956,10 +989,9 @@ const razorpayWebhook = async (req, res) => {
           },
         });
     
-      // ---------------------------------------------------
-      // Cancel old Razorpay subscriptions
-      // ---------------------------------------------------
+      console.log("OLD ACTIVE SUBSCRIPTIONS:", oldSubscriptions);
     
+      // Cancel old subscriptions in Razorpay
       for (const oldSubscription of oldSubscriptions) {
     
         if (!oldSubscription.razorpaySubscriptionId) {
@@ -973,11 +1005,8 @@ const razorpayWebhook = async (req, res) => {
             oldSubscription.razorpaySubscriptionId
           );
     
-          await razorpay.subscriptions.cancel(
-            oldSubscription.razorpaySubscriptionId,
-            {
-              cancel_at_cycle_end: false,
-            }
+          await cancelRazorpaySubscription(
+            oldSubscription.razorpaySubscriptionId
           );
     
           console.log(
@@ -985,42 +1014,37 @@ const razorpayWebhook = async (req, res) => {
             oldSubscription.razorpaySubscriptionId
           );
     
+          // Cancel old subscription in DB
+          await prisma.subscription.update({
+            where: {
+              subscriptionId: oldSubscription.subscriptionId,
+            },
+            data: {
+              status: "CANCELLED",
+            },
+          });
+    
+          console.log(
+            "Old DB subscription cancelled:",
+            oldSubscription.subscriptionId
+          );
+    
         } catch (error) {
     
           console.error(
-            "Failed to cancel old Razorpay subscription:",
-            error
+            "Old subscription cancellation failed:",
+            error.response?.data || error.message
           );
     
           return res.status(500).json({
             success: false,
-            message:
-              "Failed to cancel old Razorpay subscription",
+            message: "Failed to cancel old subscription",
+            error: error.response?.data || error.message,
           });
         }
       }
     
-      // ---------------------------------------------------
-      // Cancel old LOCAL subscriptions
-      // ---------------------------------------------------
-    
-      await prisma.subscription.updateMany({
-        where: {
-          tenantId: subscription.tenantId,
-          status: "ACTIVE",
-          NOT: {
-            subscriptionId: subscription.subscriptionId,
-          },
-        },
-        data: {
-          status: "CANCELLED",
-        },
-      });
-    
-      // ---------------------------------------------------
-      // Activate NEW subscription
-      // ---------------------------------------------------
-    
+      // Activate new subscription
       await prisma.subscription.update({
         where: {
           subscriptionId: subscription.subscriptionId,
@@ -1039,10 +1063,6 @@ const razorpayWebhook = async (req, res) => {
 // 3. Subscription Activated
 if (event === "subscription.activated") {
 
-  // ---------------------------------------------------
-  // Find old ACTIVE subscriptions
-  // ---------------------------------------------------
-
   const oldSubscriptions =
     await prisma.subscription.findMany({
       where: {
@@ -1054,10 +1074,13 @@ if (event === "subscription.activated") {
       },
     });
 
-  // ---------------------------------------------------
-  // Cancel old Razorpay subscriptions
-  // ---------------------------------------------------
+  console.log(
+    "OLD SUBSCRIPTIONS:",
+    oldSubscriptions
+  );
 
+
+  // Cancel old subscriptions
   for (const oldSubscription of oldSubscriptions) {
 
     if (!oldSubscription.razorpaySubscriptionId) {
@@ -1066,62 +1089,51 @@ if (event === "subscription.activated") {
 
     try {
 
-      console.log(
-        "Cancelling old Razorpay subscription:",
+      // Only send subscription ID
+      await cancelRazorpaySubscription(
         oldSubscription.razorpaySubscriptionId
       );
 
-      await razorpay.subscriptions.cancel(
-        oldSubscription.razorpaySubscriptionId,
-        {
-          cancel_at_cycle_end: false,
-        }
-      );
+      // Razorpay cancelled successfully
+      // Now cancel in DB
+
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            oldSubscription.subscriptionId,
+        },
+        data: {
+          status: "CANCELLED",
+        },
+      });
 
       console.log(
-        "Old Razorpay subscription cancelled:",
-        oldSubscription.razorpaySubscriptionId
+        "OLD SUBSCRIPTION CANCELLED:",
+        oldSubscription.subscriptionId
       );
 
     } catch (error) {
 
       console.error(
-        "Old Razorpay subscription cancellation failed:",
-        error
+        "OLD SUBSCRIPTION CANCEL FAILED:",
+        error.response?.data || error.message
       );
 
       return res.status(500).json({
         success: false,
-        message:
-          "Failed to cancel old Razorpay subscription",
+        message: "Failed to cancel old subscription",
+        error:
+          error.response?.data || error.message,
       });
     }
   }
 
-  // ---------------------------------------------------
-  // Cancel old LOCAL subscriptions
-  // ---------------------------------------------------
 
-  await prisma.subscription.updateMany({
-    where: {
-      tenantId: subscription.tenantId,
-      status: "ACTIVE",
-      NOT: {
-        subscriptionId: subscription.subscriptionId,
-      },
-    },
-    data: {
-      status: "CANCELLED",
-    },
-  });
-
-  // ---------------------------------------------------
-  // Activate new LOCAL subscription
-  // ---------------------------------------------------
-
+  // Activate new subscription
   await prisma.subscription.update({
     where: {
-      subscriptionId: subscription.subscriptionId,
+      subscriptionId:
+        subscription.subscriptionId,
     },
     data: {
       status: "ACTIVE",
@@ -1129,7 +1141,7 @@ if (event === "subscription.activated") {
   });
 
   console.log(
-    "New subscription activated:",
+    "NEW SUBSCRIPTION ACTIVE:",
     subscription.subscriptionId
   );
 }
@@ -1223,8 +1235,6 @@ if (event === "subscription.activated") {
     });
   }
 };
-
-
 
 
 const getCurrentSubscription = async (req, res) => {
@@ -1362,9 +1372,6 @@ const getCurrentSubscription = async (req, res) => {
   }
 };
 
-// ==========================================
-// GET ALL ACTIVE PLANS
-// ==========================================
 
 const getAvailablePlans = async (req, res) => {
   try {
