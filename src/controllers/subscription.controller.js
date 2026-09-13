@@ -383,38 +383,7 @@ const upgradeSubscription = async (req, res) => {
           },
         });
     
-      if (existingPending?.razorpaySubscriptionId) {
-        return res.status(200).json({
-          success: true,
-          message:
-            "Existing upgrade found. Please complete AutoPay authorization.",
-
-          currentPlan: {
-            planId: currentPlan.planId,
-            name: currentPlan.name,
-            type: currentPlan.type,
-          },
-
-          newPlan: {
-            planId: newPlan.planId,
-            name: newPlan.name,
-            price: Number(newPlan.price),
-            billingCycle: newPlan.billingCycle,
-          },
-
-          subscription: {
-            subscriptionId:
-              existingPending.subscriptionId,
-            status: existingPending.status,
-          },
     
-          razorpay: {
-            keyId: config.razorpay.keyId,
-            subscriptionId:
-              existingPending.razorpaySubscriptionId,
-          },
-        });
-      }
     
       // ---------------------------------------------------
       // Current subscription dates
@@ -607,6 +576,59 @@ if (newPlan.billingCycle === "MONTHLY") {
         razorpayStartDate.getTime() / 1000
       );
 
+
+      if (existingPending?.razorpaySubscriptionId) {
+        return res.status(200).json({
+          success: true,
+          message:
+            "Existing upgrade found. Please complete AutoPay authorization.",
+
+          currentPlan: {
+            planId: currentPlan.planId,
+            name: currentPlan.name,
+            type: currentPlan.type,
+          },
+
+          newPlan: {
+            planId: newPlan.planId,
+            name: newPlan.name,
+            price: Number(newPlan.price),
+            billingCycle: newPlan.billingCycle,
+          },
+
+          calculation: {
+
+            usedDays,
+      
+            usedAmount:
+              Number(
+                usedAmount.toFixed(2)
+              ),
+      
+            remainingAmount:
+              Number(
+                remainingAmount.toFixed(2)
+              ),
+      
+            upgradeAmount:
+              Number(
+                upgradeAmount.toFixed(2)
+              ),
+          },
+
+          subscription: {
+            subscriptionId:
+              existingPending.subscriptionId,
+            status: existingPending.status,
+          },
+    
+          razorpay: {
+            keyId: config.razorpay.keyId,
+            subscriptionId:
+              existingPending.razorpaySubscriptionId,
+          },
+        });
+      }
 
   // const startAt = Math.floor(
   //   newStartDate.getTime() / 1000
@@ -836,8 +858,7 @@ if (newPlan.billingCycle === "MONTHLY") {
             planId: currentPlan.planId,
             name: currentPlan.name,
             price: oldPrice,
-            billingCycle:
-              currentPlan.billingCycle,
+            billingCycle: currentPlan.billingCycle,
           },
     
           newPlan: {
