@@ -204,6 +204,13 @@ const upgradeSubscription = async (req, res) => {
             billingCycle: newPlan.billingCycle,
           },
 
+          calculation: {
+            usedDays: 0,
+            usedAmount: 0,
+            remainingAmount: 0,
+            upgradeAmount: Number(newPlan.price),
+          },
+
           subscription: {
             subscriptionId:
               existingPending.subscriptionId,
@@ -295,6 +302,13 @@ const upgradeSubscription = async (req, res) => {
             name: newPlan.name,
             price: Number(newPlan.price),
             billingCycle: newPlan.billingCycle,
+          },
+
+          calculation: {
+            usedDays: 0,
+            usedAmount: 0,
+            remainingAmount: 0,
+            upgradeAmount: Number(newPlan.price),
           },
 
           subscription: {
