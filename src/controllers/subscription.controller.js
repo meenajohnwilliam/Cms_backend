@@ -1458,6 +1458,9 @@ const getAvailablePlans = async (req, res) => {
         planLevel: {
           gt: currentLevel,
         },
+        price: {
+          gt :currentSubscription.plan.price,
+        },
       },
 
       orderBy: [
