@@ -40,8 +40,8 @@ router.post(
 
 router.get(
   "/plans",
-  authMiddleware,
-  roleMiddleware("ADMIN"),
+  // authMiddleware,
+  // roleMiddleware("ADMIN"),
   getAvailablePlans
 );
 

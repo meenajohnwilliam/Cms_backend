@@ -1424,7 +1424,7 @@ const getCurrentSubscription = async (req, res) => {
 const getAvailablePlans = async (req, res) => {
   try {
 
-    const { tenantId } = req.user;
+    const { tenantId } = req.user
 
     if (!tenantId) {
       return res.status(400).json({
@@ -1460,10 +1460,12 @@ const getAvailablePlans = async (req, res) => {
           "Active subscription not found",
       });
     }
+    
 
 
     const currentLevel = Number(currentSubscription.plan.planLevel);
 
+  
 
     const plans =
     await prisma.plan.findMany({
@@ -1472,9 +1474,7 @@ const getAvailablePlans = async (req, res) => {
         planLevel: {
           gt: currentLevel,
         },
-        price: {
-          gt :currentSubscription.plan.price,
-        },
+        billingCycle : currentSubscription.plan.billingCycle
       },
 
       orderBy: [
@@ -1487,6 +1487,7 @@ const getAvailablePlans = async (req, res) => {
         },
       ],
     });
+    
 
     if (plans.length === 0) {
       return res.status(200).json({
