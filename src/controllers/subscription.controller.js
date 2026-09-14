@@ -1425,6 +1425,7 @@ const getAvailablePlans = async (req, res) => {
   try {
 
     const { tenantId } = req.user
+    
 
     if (!tenantId) {
       return res.status(400).json({
@@ -1465,17 +1466,25 @@ const getAvailablePlans = async (req, res) => {
 
     const currentLevel = Number(currentSubscription.plan.planLevel);
 
+
+    const whereCondition = {
+      isActive: true,
+      planLevel: {
+        gt: currentLevel,
+      },
+    };
+    
+    // Only paid plans have MONTHLY/YEARLY billing cycles
+    if (currentSubscription.plan.type === "PAID") {
+      whereCondition.billingCycle =
+        currentSubscription.plan.billingCycle;
+    }
+    
   
 
     const plans =
     await prisma.plan.findMany({
-      where: {
-        isActive: true,
-        planLevel: {
-          gt: currentLevel,
-        },
-        billingCycle : currentSubscription.plan.billingCycle
-      },
+      where: whereCondition,
 
       orderBy: [
         {
