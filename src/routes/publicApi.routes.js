@@ -13,6 +13,26 @@ const {
 
 const router = express.Router();
 
+
+// ============================================================
+// PUBLIC GET FORM API
+// ============================================================
+
+router.get(
+  "/:projectSlug/forms/:formSlug",
+  getPublicForm
+);
+
+// ============================================================
+// PUBLIC SUBMIT FORM API
+// ============================================================
+
+router.post(
+  "/:projectSlug/forms/:formSlug/submit",
+  upload.any(),
+  submitPublicForm
+);
+
 // ============================================================
 // PUBLIC GET COLLECTION API
 // ============================================================
@@ -38,23 +58,6 @@ router.get(
   getPublicRecord
 );
 
-// ============================================================
-// PUBLIC GET FORM API
-// ============================================================
 
-router.get(
-  "/:projectSlug/forms/:formSlug",
-  getPublicForm
-);
-
-// ============================================================
-// PUBLIC SUBMIT FORM API
-// ============================================================
-
-router.post(
-  "/:projectSlug/forms/:formSlug/submit",
-  upload.any(),
-  submitPublicForm
-);
 
 module.exports = router;
