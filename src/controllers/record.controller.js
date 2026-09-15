@@ -326,6 +326,7 @@ const createRecord = async (req, res) => {
     // STORAGE LIMIT
     // ========================================================
 
+    
     const storageLimit = subscription.plan.storageLimit;
 
     if (storageLimit !== -1) {
