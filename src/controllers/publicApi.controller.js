@@ -987,51 +987,106 @@ const getPublicForm = async (req, res) => {
     // CHECK REQUIRED FIELDS
     // ========================================================
 
-    for (const field of form.fields) {
+  // ========================================================
+// CHECK FORM FIELDS
+// ========================================================
 
-      if (!field.required) {
-        continue;
-      }
+for (const field of form.fields) {
 
-      // FILE / IMAGE FIELD
+  // ======================================================
+  // FILE / IMAGE FIELD
+  // ======================================================
+
+  if (
+    field.type === "IMAGE" ||
+    field.type === "FILE"
+  ) {
+
+    const uploadedFile = files.find(
+      (file) => file.fieldname === field.name
+    );
+
+    // ====================================================
+    // REQUIRED FILE / IMAGE
+    // ====================================================
+
+    if (field.required && !uploadedFile) {
+
+      return res.status(400).json({
+        success: false,
+        message: `${field.label} is required`,
+        field: field.name,
+      });
+
+    }
+
+    // ====================================================
+    // OPTIONAL FILE / IMAGE
+    // ====================================================
+
+    if (!uploadedFile) {
+      continue;
+    }
+
+    // ====================================================
+    // IMAGE TYPE VALIDATION
+    // ====================================================
+
+    if (field.type === "IMAGE") {
+
       if (
-        field.type === "IMAGE" ||
-        field.type === "FILE"
+        !uploadedFile.mimetype ||
+        !uploadedFile.mimetype.startsWith("image/")
       ) {
-        const uploadedFile =
-         files.find(
-            (file) =>
-              file.fieldname === field.name
-          );
 
-        if (!uploadedFile) {
-          return res.status(400).json({
-            success: false,
-            message:
-              `${field.label} is required`,
-            field: field.name,
-          });
-        }
-
-        continue;
-      }
-
-      // NORMAL FIELD
-      const value = data[field.name];
-
-      if (
-        value === undefined ||
-        value === null ||
-        value === ""
-      ) {
         return res.status(400).json({
           success: false,
-          message:
-            `${field.label} is required`,
+          message: `${field.label} accepts image files only`,
           field: field.name,
         });
+
       }
+
     }
+
+    // ====================================================
+    // FILE TYPE
+    // ====================================================
+
+    if (field.type === "FILE") {
+
+      // Any file type is allowed
+
+    }
+
+    continue;
+  }
+
+
+  // ======================================================
+  // NORMAL FIELD
+  // ======================================================
+
+  const value = data[field.name];
+
+  if (
+    field.required &&
+    (
+      value === undefined ||
+      value === null ||
+      value === ""
+    )
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message: `${field.label} is required`,
+      field: field.name,
+    });
+
+  }
+
+}
 
      // ========================================================
     // CALCULATE UPLOAD STORAGE
