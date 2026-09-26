@@ -242,6 +242,49 @@ const createRecord = async (req, res) => {
 
 
     // ========================================================
+// VALIDATE UPLOADED FILES
+// ========================================================
+
+const allowedImageTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/svg+xml",
+];
+
+for (const file of files) {
+  const field = collection.fields.find(
+    (item) => item.slug === file.fieldname
+  );
+
+  // Invalid file field
+  if (!field) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid file field: ${file.fieldname}`,
+      field: file.fieldname,
+    });
+  }
+
+  // IMAGE → only allowed image types
+  if (field.type === "IMAGE") {
+    if (!allowedImageTypes.includes(file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: `${field.slug} accepts image files only`,
+        field: field.slug,
+      });
+    }
+  }
+
+  // FILE → any file allowed
+  if (field.type === "FILE") {
+    continue;
+  }
+}
+
+    // ========================================================
     // GET ACTIVE SUBSCRIPTION
     // ========================================================
 
@@ -370,6 +413,7 @@ const createRecord = async (req, res) => {
         continue;
       }
 
+      
       
 
       await prisma.media.create({
