@@ -49,7 +49,6 @@ const cancelRazorpaySubscription = async (subscriptionId) => {
 };
 
 
-
 const upgradeSubscription = async (req, res) => {
   try {
     const { planId } = req.body;

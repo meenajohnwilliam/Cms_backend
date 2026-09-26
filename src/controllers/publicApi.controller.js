@@ -2,7 +2,81 @@
 const crypto = require("crypto");
 const prisma = require("../config/prisma");
 
+const validateFieldValue = (field, value) => {
+  switch (field.type) {
+    case "TEXT":
+      if (typeof value !== "string") {
+        return `${field.label} must be text`;
+      }
+      break;
 
+    case "EMAIL":
+      if (typeof value !== "string") {
+        return `${field.label} must be a valid email`;
+      }
+
+      const emailRegex =
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!emailRegex.test(value)) {
+        return `${field.label} must be a valid email`;
+      }
+      break;
+
+    case "NUMBER":
+      if (
+        typeof value !== "number" &&
+        isNaN(Number(value))
+      ) {
+        return `${field.label} must be a number`;
+      }
+      break;
+
+    case "PHONE":
+      if (typeof value !== "string") {
+        return `${field.label} must be a valid phone number`;
+      }
+
+      const phoneRegex = /^[0-9+\-\s()]{7,20}$/;
+
+      if (!phoneRegex.test(value)) {
+        return `${field.label} must be a valid phone number`;
+      }
+      break;
+
+    case "URL":
+      if (typeof value !== "string") {
+        return `${field.label} must be a valid URL`;
+      }
+
+      try {
+        new URL(value);
+      } catch {
+        return `${field.label} must be a valid URL`;
+      }
+      break;
+
+    case "DATE":
+      if (
+        typeof value !== "string" ||
+        isNaN(Date.parse(value))
+      ) {
+        return `${field.label} must be a valid date`;
+      }
+      break;
+
+    case "BOOLEAN":
+      if (typeof value !== "boolean") {
+        return `${field.label} must be true or false`;
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  return null;
+};
 // ============================================================
 // HASH API KEY
 // ============================================================
@@ -799,13 +873,13 @@ const getPublicForm = async (req, res) => {
         message: "Internal server error",
       });
     }
-  };
+};
 
 
  
 
 
-  const submitPublicForm = async (req, res) => {
+const submitPublicForm = async (req, res) => {
   try {
     const { projectSlug, formSlug } = req.params;
 
@@ -987,106 +1061,51 @@ const getPublicForm = async (req, res) => {
     // CHECK REQUIRED FIELDS
     // ========================================================
 
-  // ========================================================
-// CHECK FORM FIELDS
-// ========================================================
+    for (const field of form.fields) {
 
-for (const field of form.fields) {
-
-  // ======================================================
-  // FILE / IMAGE FIELD
-  // ======================================================
-
-  if (
-    field.type === "IMAGE" ||
-    field.type === "FILE"
-  ) {
-
-    const uploadedFile = files.find(
-      (file) => file.fieldname === field.name
-    );
-
-    // ====================================================
-    // REQUIRED FILE / IMAGE
-    // ====================================================
-
-    if (field.required && !uploadedFile) {
-
-      return res.status(400).json({
-        success: false,
-        message: `${field.label} is required`,
-        field: field.name,
-      });
-
-    }
-
-    // ====================================================
-    // OPTIONAL FILE / IMAGE
-    // ====================================================
-
-    if (!uploadedFile) {
-      continue;
-    }
-
-    // ====================================================
-    // IMAGE TYPE VALIDATION
-    // ====================================================
-
-    if (field.type === "IMAGE") {
-
-      if (
-        !uploadedFile.mimetype ||
-        !uploadedFile.mimetype.startsWith("image/")
-      ) {
-
-        return res.status(400).json({
-          success: false,
-          message: `${field.label} accepts image files only`,
-          field: field.name,
-        });
-
+      if (!field.required) {
+        continue;
       }
 
+      // FILE / IMAGE FIELD
+      if (
+        field.type === "IMAGE" ||
+        field.type === "FILE"
+      ) {
+        const uploadedFile =
+         files.find(
+            (file) =>
+              file.fieldname === field.name
+          );
+
+        if (!uploadedFile) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `${field.label} is required`,
+            field: field.name,
+          });
+        }
+
+        continue;
+      }
+
+      // NORMAL FIELD
+      const value = data[field.name];
+
+      if (
+        value === undefined ||
+        value === null ||
+        value === ""
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `${field.label} is required`,
+          field: field.name,
+        });
+      }
     }
-
-    // ====================================================
-    // FILE TYPE
-    // ====================================================
-
-    if (field.type === "FILE") {
-
-      // Any file type is allowed
-
-    }
-
-    continue;
-  }
-
-
-  // ======================================================
-  // NORMAL FIELD
-  // ======================================================
-
-  const value = data[field.name];
-
-  if (
-    field.required &&
-    (
-      value === undefined ||
-      value === null ||
-      value === ""
-    )
-  ) {
-
-    return res.status(400).json({
-      success: false,
-      message: `${field.label} is required`,
-      field: field.name,
-    });
-
-  }
-
-}
 
      // ========================================================
     // CALCULATE UPLOAD STORAGE
@@ -1151,48 +1170,99 @@ for (const field of form.fields) {
 
  
 
-    for (const file of files) {
+    // for (const file of files) {
 
-      const field =
-        form.fields.find(
-          (item) =>
-            item.name === file.fieldname
-        );
+    //   const field =
+    //     form.fields.find(
+    //       (item) =>
+    //         item.name === file.fieldname
+    //     );
 
-      if (!field) {
+    //   if (!field) {
+    //     continue;
+    //   }
+
+    //   await prisma.media.create({
+    //     data: {
+    //       submissionId:
+    //         submission.submissionId,
+
+    //       fieldId:
+    //         field.fieldId,
+
+    //       type:
+    //         field.type,
+
+    //       originalName:
+    //         file.originalname,
+
+    //       fileName:
+    //         file.key.split("/").pop(),
+
+    //       mimeType:
+    //         file.mimetype,
+
+    //       size:
+    //         file.size,
+
+    //       storageKey:
+    //         file.key,
+
+    //       url:
+    //         file.location,
+    //     },
+    //   });
+    // }
+
+    for (const field of form.fields) {
+
+      const value = data[field.name];
+    
+      // ============================
+      // REQUIRED CHECK
+      // ============================
+    
+      if (field.required) {
+    
+        if (
+          value === undefined ||
+          value === null ||
+          value === ""
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `${field.label} is required`,
+            field: field.name,
+          });
+        }
+      }
+    
+      // ============================
+      // SKIP OPTIONAL EMPTY FIELD
+      // ============================
+    
+      if (
+        value === undefined ||
+        value === null ||
+        value === ""
+      ) {
         continue;
       }
-
-      await prisma.media.create({
-        data: {
-          submissionId:
-            submission.submissionId,
-
-          fieldId:
-            field.fieldId,
-
-          type:
-            field.type,
-
-          originalName:
-            file.originalname,
-
-          fileName:
-            file.key.split("/").pop(),
-
-          mimeType:
-            file.mimetype,
-
-          size:
-            file.size,
-
-          storageKey:
-            file.key,
-
-          url:
-            file.location,
-        },
-      });
+    
+      // ============================
+      // TYPE VALIDATION
+      // ============================
+    
+      const validationError =
+        validateFieldValue(field, value);
+    
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          message: validationError,
+          field: field.name,
+        });
+      }
     }
 
     // ========================================================
