@@ -1030,6 +1030,58 @@ const submitPublicForm = async (req, res) => {
       }
     }
 
+
+    // ========================================================
+// VALIDATE UPLOADED FILE TYPES
+// ========================================================
+
+const allowedImageTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/svg+xml",
+];
+
+for (const file of files) {
+
+  const field = form.fields.find(
+    (item) => item.name === file.fieldname
+  );
+
+  // Invalid field
+  if (!field) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid file field: ${file.fieldname}`,
+      field: file.fieldname,
+    });
+  }
+
+  // ======================================================
+  // IMAGE FIELD → IMAGE ONLY
+  // ======================================================
+
+  if (field.type === "IMAGE") {
+
+    if (!allowedImageTypes.includes(file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: `${field.label} must be an image`,
+        field: field.name,
+      });
+    }
+  }
+
+  // ======================================================
+  // FILE FIELD → ANY FILE
+  // ======================================================
+
+  if (field.type === "FILE") {
+    continue;
+  }
+}
+
      // ========================================================
     // CALCULATE UPLOAD STORAGE
     // ========================================================
