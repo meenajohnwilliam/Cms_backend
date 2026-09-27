@@ -132,9 +132,17 @@ model UserProjectAccess {
   @@index([projectId])
 }
 
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model Plan {
   planId              String         @id @default(cuid())
-  name                String         
+  name                String     
+    // Plan versioning
+  version             Int             @default(1)
+  status              PlanStatus      @default(ACTIVE)    
   type                PlanType      
   billingCycle        BillingCycle
   price               String         
