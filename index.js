@@ -18,6 +18,7 @@ const formRoutes = require("./src/routes/form.routes");
 const formFieldRoutes = require("./src/routes/formField.routes");
 const formSubmissionRoutes = require("./src/routes/formSubmission.routes");
 const usageRoutes = require("./src/routes/usage.routes") 
+const tenantRoutes = require("./src/routes/tenant.routes")
 
 
 app.use(
@@ -58,14 +59,12 @@ app.use("/api/v1/public",publicApiRoutes);
 app.use("/api/v1/admin",clientUserRoutes);
 app.use("/api/v1/forms",formRoutes);
 app.use("/api/v1/forms/fields",formFieldRoutes);
+app.use("/api/v1/tenant",tenantRoutes);
 // Usage routes
 app.use("/api/v1/usage", usageRoutes);
 
 app.use("/api/v1/forms/submissions",formSubmissionRoutes);
 
-
-
-const prisma = require("./src/config/prisma")
 
 
 
