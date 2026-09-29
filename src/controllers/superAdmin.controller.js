@@ -1,55 +1,68 @@
-const prisma = require("../config/prisma")
+const prisma = require("../config/prisma");
 const bcrypt = require("bcryptjs");
 
 
-const createSuperAdmin = async (req, res) => {
-    try {
-      const { name, email, password } = req.body;
-  
-      const existingUser = await prisma.user.findUnique({
-        where: {
-          email,
-        },
-      });
-  
-      if (existingUser) {
-        return res.status(400).json({
-          message: "User already exists",
-        });
-      }
+// ============================================================
+// CREATE SUPER ADMIN
+// ============================================================
 
-      const hashedPassword = await bcrypt.hash(
-        password,
-        12
-      );
-  
-      const superAdmin = await prisma.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword ,
-          role: "SUPER_ADMIN",
-          tenantId: null,
-          isEmailVerified: true,
-        },
-      });
-  
-      res.status(201).json({
-        message: "Super Admin created successfully",
-        data: {
-            userId: superAdmin.userId,
-            name: superAdmin.name,
-            email: superAdmin.email,
-            role: superAdmin.role,
-          },
-      });
-  
-    } catch (error) {
-      res.status(500).json({
-        message: error.message,
+const createSuperAdmin = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists",
       });
     }
-  };
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      12
+    );
+
+    const superAdmin = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: "SUPER_ADMIN",
+        tenantId: null,
+        isEmailVerified: true,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Super Admin created successfully",
+      data: {
+        userId: superAdmin.userId,
+        name: superAdmin.name,
+        email: superAdmin.email,
+        role: superAdmin.role,
+      },
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Create Super Admin Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
 
 
 
@@ -59,9 +72,6 @@ const createSuperAdmin = async (req, res) => {
 
 const getDashboard = async (req, res) => {
   try {
-    // ========================================================
-    // RUN DASHBOARD QUERIES IN PARALLEL
-    // ========================================================
 
     const [
       totalTenants,
@@ -115,6 +125,7 @@ const getDashboard = async (req, res) => {
         },
       }),
 
+
       // ======================================================
       // USERS
       // ======================================================
@@ -133,17 +144,20 @@ const getDashboard = async (req, res) => {
         },
       }),
 
+
       // ======================================================
       // PROJECTS
       // ======================================================
 
       prisma.project.count(),
 
+
       // ======================================================
       // COLLECTIONS
       // ======================================================
 
       prisma.collection.count(),
+
 
       // ======================================================
       // API KEYS
@@ -163,6 +177,7 @@ const getDashboard = async (req, res) => {
         },
       }),
 
+
       // ======================================================
       // FORMS
       // ======================================================
@@ -180,6 +195,7 @@ const getDashboard = async (req, res) => {
           status: "DRAFT",
         },
       }),
+
 
       // ======================================================
       // SUBSCRIPTIONS
@@ -227,6 +243,7 @@ const getDashboard = async (req, res) => {
         },
       }),
 
+
       // ======================================================
       // USAGE
       // ======================================================
@@ -242,6 +259,7 @@ const getDashboard = async (req, res) => {
           teamMembersUsed: true,
         },
       }),
+
 
       // ======================================================
       // RECENT TENANTS
@@ -304,6 +322,7 @@ const getDashboard = async (req, res) => {
         take: 5,
       }),
 
+
       // ======================================================
       // RECENT PAYMENTS
       // ======================================================
@@ -347,6 +366,7 @@ const getDashboard = async (req, res) => {
       }),
     ]);
 
+
     // ========================================================
     // RESPONSE
     // ========================================================
@@ -355,9 +375,6 @@ const getDashboard = async (req, res) => {
       success: true,
 
       dashboard: {
-        // ====================================================
-        // TENANTS
-        // ====================================================
 
         tenants: {
           total: totalTenants,
@@ -365,19 +382,11 @@ const getDashboard = async (req, res) => {
           inactive: inactiveTenants,
         },
 
-        // ====================================================
-        // USERS
-        // ====================================================
-
         users: {
           total: totalUsers,
           admins: totalAdmins,
           users: totalNormalUsers,
         },
-
-        // ====================================================
-        // RESOURCES
-        // ====================================================
 
         resources: {
           projects: totalProjects,
@@ -396,10 +405,6 @@ const getDashboard = async (req, res) => {
           },
         },
 
-        // ====================================================
-        // SUBSCRIPTIONS
-        // ====================================================
-
         subscriptions: {
           active: activeSubscriptions,
           pastDue: pastDueSubscriptions,
@@ -410,46 +415,37 @@ const getDashboard = async (req, res) => {
           pending: pendingSubscriptions,
         },
 
-        // ====================================================
-        // PLATFORM USAGE
-        // ====================================================
         usage: {
           storageUsedBytes:
             totalUsage._sum.storageUsedBytes?.toString() || "0",
-        
+
           getRequestsUsed:
             totalUsage._sum.getRequestsUsed || 0,
-        
+
           writeRequestsUsed:
             totalUsage._sum.writeRequestsUsed || 0,
-        
+
           apiKeysUsed:
             totalUsage._sum.apiKeysUsed || 0,
-        
+
           projectsUsed:
             totalUsage._sum.projectsUsed || 0,
-        
+
           collectionsUsed:
             totalUsage._sum.collectionsUsed || 0,
-        
+
           teamMembersUsed:
             totalUsage._sum.teamMembersUsed || 0,
         },
-        // ====================================================
-        // RECENT TENANTS
-        // ====================================================
 
         recentTenants,
-
-        // ====================================================
-        // RECENT PAYMENTS
-        // ====================================================
 
         recentPayments,
       },
     });
 
   } catch (error) {
+
     console.error(
       "Super Admin Dashboard Error:",
       error
@@ -462,7 +458,747 @@ const getDashboard = async (req, res) => {
   }
 };
 
+
+
+// ============================================================
+// GET ALL TENANTS
+// ============================================================
+
+const getTenantList = async (req, res) => {
+  try {
+
+    const tenants = await prisma.tenant.findMany({
+      select: {
+        tenantId: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+
+        users: {
+          where: {
+            role: "ADMIN",
+          },
+
+          select: {
+            userId: true,
+            name: true,
+            email: true,
+          },
+
+          take: 1,
+        },
+
+        subscription: {
+          where: {
+            status: "ACTIVE",
+          },
+
+          orderBy: {
+            createdAt: "desc",
+          },
+
+          take: 1,
+
+          select: {
+            subscriptionId: true,
+            status: true,
+            billingCycle: true,
+            planPrice: true,
+
+            plan: {
+              select: {
+                planId: true,
+                name: true,
+                version: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: tenants.length,
+      tenants,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant List Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenants",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT BASIC DETAILS
+// ============================================================
+
+const getTenantDetails = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+
+      select: {
+        tenantId: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+
+    return res.status(200).json({
+      success: true,
+      tenant,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Details Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant details",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT ADMIN
+// ============================================================
+
+const getTenantAdmin = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const admin = await prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: "ADMIN",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isEmailVerified: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant admin not found",
+      });
+    }
+
+
+    return res.status(200).json({
+      success: true,
+      admin,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Admin Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant admin",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT USERS
+// ============================================================
+
+const getTenantUsers = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const users = await prisma.user.findMany({
+      where: {
+        tenantId,
+        role: "USER",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isEmailVerified: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Users Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant users",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET CURRENT TENANT SUBSCRIPTION
+// ============================================================
+
+const getTenantSubscription = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+
+        status: "ACTIVE",
+
+        plan: {
+          type: "PAID",
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      select: {
+        subscriptionId: true,
+        tenantId: true,
+        billingCycle: true,
+        status: true,
+        planPrice: true,
+        startDate: true,
+        endDate: true,
+        gracePeriodEndDate: true,
+        razorpaySubscriptionId: true,
+        razorpayCustomerId: true,
+        createdAt: true,
+        updatedAt: true,
+
+        plan: {
+          select: {
+            planId: true,
+            name: true,
+            version: true,
+            type: true,
+            billingCycle: true,
+            price: true,
+
+            projectLimit: true,
+            collectionLimit: true,
+            apiKeyLimit: true,
+            teamMemberLimit: true,
+            storageLimit: true,
+            planLevel: true,
+            getRequestsLimit: true,
+            writeRequestsLimit: true,
+
+            customDomain: true,
+            mediaUpload: true,
+            analytics: true,
+            emailSupport: true,
+          },
+        },
+      },
+    });
+
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Active paid subscription not found",
+      });
+    }
+
+
+    const response = {
+      ...subscription,
+
+      plan: {
+        ...subscription.plan,
+
+        storageLimit:
+          subscription.plan.storageLimit?.toString() || "0",
+      },
+    };
+
+
+    return res.status(200).json({
+      success: true,
+      subscription: response,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant subscription",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT SUBSCRIPTION HISTORY
+// ============================================================
+
+const getTenantSubscriptionHistory = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const subscriptions = await prisma.subscription.findMany({
+      where: {
+        tenantId,
+
+        // Do not show FREE plans
+        plan: {
+          type: "PAID",
+        },
+      },
+
+      select: {
+        subscriptionId: true,
+        billingCycle: true,
+        status: true,
+        planPrice: true,
+        startDate: true,
+        endDate: true,
+        gracePeriodEndDate: true,
+        razorpaySubscriptionId: true,
+        razorpayCustomerId: true,
+        createdAt: true,
+        updatedAt: true,
+
+        plan: {
+          select: {
+            planId: true,
+            name: true,
+            version: true,
+            type: true,
+            billingCycle: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: subscriptions.length,
+      subscriptions,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Subscription History Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch subscription history",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT PAYMENT HISTORY
+// ============================================================
+
+const getTenantPaymentHistory = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const payments = await prisma.payment.findMany({
+      where: {
+        tenantId,
+      },
+
+      select: {
+        paymentId: true,
+        tenantId: true,
+        subscriptionId: true,
+        amount: true,
+        currency: true,
+        status: true,
+        razorpayPaymentId: true,
+        razorpayOrderId: true,
+        razorpaySubscriptionId: true,
+        paidAt: true,
+        createdAt: true,
+        updatedAt: true,
+
+        subscription: {
+          select: {
+            subscriptionId: true,
+            billingCycle: true,
+            planPrice: true,
+
+            plan: {
+              select: {
+                planId: true,
+                name: true,
+                version: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: payments.length,
+      payments,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Payment History Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch payment history",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT USAGE
+// ============================================================
+
+const getTenantUsage = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+
+    if (!usage) {
+      return res.status(404).json({
+        success: false,
+        message: "Usage data not found",
+      });
+    }
+
+
+    return res.status(200).json({
+      success: true,
+
+      usage: {
+        usageId: usage.usageId,
+        tenantId: usage.tenantId,
+
+        storageUsedBytes:
+          usage.storageUsedBytes?.toString() || "0",
+
+        getRequestsUsed:
+          usage.getRequestsUsed || 0,
+
+        writeRequestsUsed:
+          usage.writeRequestsUsed || 0,
+
+        apiKeysUsed:
+          usage.apiKeysUsed || 0,
+
+        projectsUsed:
+          usage.projectsUsed || 0,
+
+        collectionsUsed:
+          usage.collectionsUsed || 0,
+
+        teamMembersUsed:
+          usage.teamMembersUsed || 0,
+
+        usageResetAt:
+          usage.usageResetAt,
+
+        createdAt:
+          usage.createdAt,
+
+        updatedAt:
+          usage.updatedAt,
+      },
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Usage Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant usage",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT PROJECTS
+// ============================================================
+
+const getTenantProjects = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const projects = await prisma.project.findMany({
+      where: {
+        tenantId,
+      },
+
+      select: {
+        projectId: true,
+        tenantId: true,
+        name: true,
+        slug: true,
+        description: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+
+        _count: {
+          select: {
+            collections: true,
+            apiKeys: true,
+            form: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: projects.length,
+      projects,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Projects Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant projects",
+    });
+  }
+};
+
+
+
+// ============================================================
+// GET TENANT FORMS
+// ============================================================
+
+const getTenantForms = async (req, res) => {
+  try {
+
+    const { tenantId } = req.params;
+
+
+    const forms = await prisma.form.findMany({
+      where: {
+        project: {
+          tenantId,
+        },
+      },
+
+      select: {
+        formId: true,
+        name: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+
+        project: {
+          select: {
+            projectId: true,
+            name: true,
+            slug: true,
+          },
+        },
+
+        _count: {
+          select: {
+            fields: true,
+            submissions: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      count: forms.length,
+      forms,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Tenant Forms Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tenant forms",
+    });
+  }
+};
+
+
+
+// ============================================================
+// EXPORT
+// ============================================================
+
 module.exports = {
+
+  // Super Admin
+  createSuperAdmin,
   getDashboard,
-  createSuperAdmin
+
+  // Tenant
+  getTenantList,
+  getTenantDetails,
+  getTenantAdmin,
+  getTenantUsers,
+  getTenantSubscription,
+  getTenantSubscriptionHistory,
+  getTenantPaymentHistory,
+  getTenantUsage,
+  getTenantProjects,
+  getTenantForms,
 };
