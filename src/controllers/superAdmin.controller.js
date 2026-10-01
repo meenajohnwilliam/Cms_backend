@@ -1112,6 +1112,7 @@ const getTenantProjects = async (req, res) => {
 
 
 
+
 // ============================================================
 // GET TENANT FORMS
 // ============================================================
@@ -1181,11 +1182,54 @@ const getTenantForms = async (req, res) => {
 
 
 
+// ============================================================
+// SUPER ADMIN CONTROLLER
+// PROJECT / COLLECTION / RECORD / FORM / SUBMISSION
+// ============================================================
 
-/* ============================================================
-   PROJECT DETAILS
-   GET /api/v1/super-admin/projects/:projectId
-============================================================ */
+
+// ============================================================
+// HELPER
+// ============================================================
+
+const getPagination = (req) => {
+  let page = Number(req.query.page) || 1;
+  let limit = Number(req.query.limit) || 25;
+
+  page = Math.max(page, 1);
+  limit = Math.min(Math.max(limit, 1), 100);
+
+  const skip = (page - 1) * limit;
+
+  return {
+    page,
+    limit,
+    skip,
+  };
+};
+
+const buildPagination = (page, limit, total) => {
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
+  };
+};
+
+
+// ============================================================
+// PROJECT
+// ============================================================
+
+// ============================================================
+// GET PROJECT DETAILS
+// GET /api/v1/super-admin/projects/:projectId
+// ============================================================
 
 const getProjectDetails = async (req, res) => {
   try {
@@ -1210,8 +1254,8 @@ const getProjectDetails = async (req, res) => {
           select: {
             collections: true,
             apiKeys: true,
-            form: true,
             userAccess: true,
+            form: true,
           },
         },
       },
@@ -1228,8 +1272,9 @@ const getProjectDetails = async (req, res) => {
       success: true,
       data: project,
     });
+
   } catch (error) {
-    console.error("getProjectDetails:", error);
+    console.error("Get project details error:", error);
 
     return res.status(500).json({
       success: false,
@@ -1239,21 +1284,29 @@ const getProjectDetails = async (req, res) => {
 };
 
 
-/* ============================================================
-   PROJECT COLLECTIONS
-   GET /api/v1/super-admin/projects/:projectId/collections
-============================================================ */
+// ============================================================
+// GET PROJECT COLLECTIONS
+// GET /api/v1/super-admin/projects/:projectId/collections
+//
+// PAGINATION ENABLED
+// ============================================================
 
 const getProjectCollections = async (req, res) => {
   try {
     const { projectId } = req.params;
 
+    const { page, limit, skip } = getPagination(req);
+
+    // Check project
     const project = await prisma.project.findUnique({
       where: {
         projectId,
       },
+
       select: {
         projectId: true,
+        name: true,
+        slug: true,
       },
     });
 
@@ -1264,44 +1317,76 @@ const getProjectCollections = async (req, res) => {
       });
     }
 
-    const collections = await prisma.collection.findMany({
-      where: {
-        projectId,
-      },
+    const [collections, total] = await Promise.all([
+      prisma.collection.findMany({
+        where: {
+          projectId,
+        },
 
-      orderBy: {
-        createdAt: "desc",
-      },
+        skip,
+        take: limit,
 
-      include: {
-        _count: {
-          select: {
-            fields: true,
-            records: true,
+        orderBy: {
+          createdAt: "desc",
+        },
+
+        include: {
+          _count: {
+            select: {
+              fields: true,
+              records: true,
+            },
           },
         },
-      },
-    });
+      }),
+
+      prisma.collection.count({
+        where: {
+          projectId,
+        },
+      }),
+    ]);
 
     return res.status(200).json({
       success: true,
+
+      project,
+
       data: collections,
+
+      pagination: buildPagination(
+        page,
+        limit,
+        total
+      ),
     });
+
   } catch (error) {
-    console.error("getProjectCollections:", error);
+    console.error(
+      "Get project collections error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch collections",
+      message: "Failed to fetch project collections",
     });
   }
 };
 
 
-/* ============================================================
-   COLLECTION DETAILS
-   GET /api/v1/super-admin/collections/:collectionId
-============================================================ */
+// ============================================================
+// COLLECTION
+// ============================================================
+
+// ============================================================
+// GET COLLECTION DETAILS
+//
+// GET /api/v1/super-admin/collections/:collectionId
+//
+// Only collection basic information.
+// Fields / records are loaded separately.
+// ============================================================
 
 const getCollectionDetails = async (req, res) => {
   try {
@@ -1318,7 +1403,14 @@ const getCollectionDetails = async (req, res) => {
             projectId: true,
             name: true,
             slug: true,
-            tenantId: true,
+
+            tenant: {
+              select: {
+                tenantId: true,
+                name: true,
+                slug: true,
+              },
+            },
           },
         },
 
@@ -1342,8 +1434,12 @@ const getCollectionDetails = async (req, res) => {
       success: true,
       data: collection,
     });
+
   } catch (error) {
-    console.error("getCollectionDetails:", error);
+    console.error(
+      "Get collection details error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1353,10 +1449,13 @@ const getCollectionDetails = async (req, res) => {
 };
 
 
-/* ============================================================
-   COLLECTION FIELDS
-   GET /api/v1/super-admin/collections/:collectionId/fields
-============================================================ */
+// ============================================================
+// GET COLLECTION FIELDS
+//
+// GET /api/v1/super-admin/collections/:collectionId/fields
+//
+// NO PAGINATION
+// ============================================================
 
 const getCollectionFields = async (req, res) => {
   try {
@@ -1374,10 +1473,15 @@ const getCollectionFields = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      count: fields.length,
       data: fields,
     });
+
   } catch (error) {
-    console.error("getCollectionFields:", error);
+    console.error(
+      "Get collection fields error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1387,22 +1491,24 @@ const getCollectionFields = async (req, res) => {
 };
 
 
-/* ============================================================
-   COLLECTION RECORDS
-   GET /api/v1/super-admin/collections/:collectionId/records
-============================================================ */
+// ============================================================
+// GET COLLECTION RECORDS
+//
+// GET /api/v1/super-admin/collections/:collectionId/records
+//
+// PAGINATION
+//
+// Example:
+// ?page=1&limit=25
+// ============================================================
 
 const getCollectionRecords = async (req, res) => {
   try {
     const { collectionId } = req.params;
 
-    let { page = 1, limit = 25 } = req.query;
+    const { page, limit, skip } = getPagination(req);
 
-    page = Math.max(parseInt(page) || 1, 1);
-    limit = Math.min(Math.max(parseInt(limit) || 25, 1), 100);
-
-    const skip = (page - 1) * limit;
-
+    // Check collection
     const collection = await prisma.collection.findUnique({
       where: {
         collectionId,
@@ -1428,20 +1534,14 @@ const getCollectionRecords = async (req, res) => {
           collectionId,
         },
 
+        skip,
+        take: limit,
+
         orderBy: {
           createdAt: "desc",
         },
 
-        skip,
-        take: limit,
-
-        select: {
-          recordId: true,
-          collectionId: true,
-          data: true,
-          createdAt: true,
-          updatedAt: true,
-
+        include: {
           _count: {
             select: {
               media: true,
@@ -1464,15 +1564,18 @@ const getCollectionRecords = async (req, res) => {
 
       data: records,
 
-      pagination: {
+      pagination: buildPagination(
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+        total
+      ),
     });
+
   } catch (error) {
-    console.error("getCollectionRecords:", error);
+    console.error(
+      "Get collection records error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1482,10 +1585,111 @@ const getCollectionRecords = async (req, res) => {
 };
 
 
-/* ============================================================
-   RECORD DETAILS
-   GET /api/v1/super-admin/records/:recordId
-============================================================ */
+// ============================================================
+// GET COLLECTION MEDIA
+//
+// GET /api/v1/super-admin/collections/:collectionId/media
+//
+// PAGINATION
+//
+// This returns media belonging to records
+// inside this collection.
+//
+// Example:
+// ?page=1&limit=25
+// ============================================================
+
+const getCollectionMedia = async (req, res) => {
+  try {
+    const { collectionId } = req.params;
+
+    const { page, limit, skip } = getPagination(req);
+
+    // Check collection
+    const collection = await prisma.collection.findUnique({
+      where: {
+        collectionId,
+      },
+
+      select: {
+        collectionId: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    if (!collection) {
+      return res.status(404).json({
+        success: false,
+        message: "Collection not found",
+      });
+    }
+
+    const [media, total] = await Promise.all([
+      prisma.media.findMany({
+        where: {
+          record: {
+            collectionId,
+          },
+        },
+
+        skip,
+        take: limit,
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.media.count({
+        where: {
+          record: {
+            collectionId,
+          },
+        },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+
+      collection,
+
+      data: media,
+
+      pagination: buildPagination(
+        page,
+        limit,
+        total
+      ),
+    });
+
+  } catch (error) {
+    console.error(
+      "Get collection media error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch collection media",
+    });
+  }
+};
+
+
+// ============================================================
+// RECORD
+// ============================================================
+
+// ============================================================
+// GET RECORD DETAILS
+//
+// GET /api/v1/super-admin/records/:recordId
+//
+// Media is included here.
+// No separate media API required when opening one record.
+// ============================================================
 
 const getRecordDetails = async (req, res) => {
   try {
@@ -1507,7 +1711,7 @@ const getRecordDetails = async (req, res) => {
               select: {
                 projectId: true,
                 name: true,
-                tenantId: true,
+                slug: true,
               },
             },
           },
@@ -1528,130 +1732,108 @@ const getRecordDetails = async (req, res) => {
       success: true,
       data: record,
     });
+
   } catch (error) {
-    console.error("getRecordDetails:", error);
+    console.error(
+      "Get record details error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch record",
+      message: "Failed to fetch record details",
     });
   }
 };
 
 
-/* ============================================================
-   RECORD MEDIA
-   GET /api/v1/super-admin/records/:recordId/media
-============================================================ */
+// ============================================================
+// FORM
+// ============================================================
 
-const getRecordMedia = async (req, res) => {
-  try {
-    const { recordId } = req.params;
-
-    const media = await prisma.media.findMany({
-      where: {
-        recordId,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: media,
-    });
-  } catch (error) {
-    console.error("getRecordMedia:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch record media",
-    });
-  }
-};
-
-
-/* ============================================================
-   PROJECT API KEYS
-   GET /api/v1/super-admin/projects/:projectId/api-keys
-============================================================ */
-
-const getProjectApiKeys = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-
-    const apiKeys = await prisma.apiKey.findMany({
-      where: {
-        projectId,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-
-      select: {
-        apiKeyId: true,
-        projectId: true,
-        name: true,
-        keyPrefix: true,
-        isActive: true,
-        lastUsedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: apiKeys,
-    });
-  } catch (error) {
-    console.error("getProjectApiKeys:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch API keys",
-    });
-  }
-};
-
-
-/* ============================================================
-   PROJECT FORMS
-   GET /api/v1/super-admin/projects/:projectId/forms
-============================================================ */
+// ============================================================
+// GET PROJECT FORMS
+//
+// GET /api/v1/super-admin/projects/:projectId/forms
+//
+// PAGINATION ENABLED
+// ============================================================
 
 const getProjectForms = async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const forms = await prisma.form.findMany({
+    const { page, limit, skip } = getPagination(req);
+
+    // Check project
+    const project = await prisma.project.findUnique({
       where: {
         projectId,
       },
 
-      orderBy: {
-        createdAt: "desc",
-      },
-
-      include: {
-        _count: {
-          select: {
-            fields: true,
-            submissions: true,
-          },
-        },
+      select: {
+        projectId: true,
+        name: true,
+        slug: true,
       },
     });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    const [forms, total] = await Promise.all([
+      prisma.form.findMany({
+        where: {
+          projectId,
+        },
+
+        skip,
+        take: limit,
+
+        orderBy: {
+          createdAt: "desc",
+        },
+
+        include: {
+          _count: {
+            select: {
+              fields: true,
+              submissions: true,
+            },
+          },
+        },
+      }),
+
+      prisma.form.count({
+        where: {
+          projectId,
+        },
+      }),
+    ]);
 
     return res.status(200).json({
       success: true,
+
+      project,
+
       data: forms,
+
+      pagination: buildPagination(
+        page,
+        limit,
+        total
+      ),
     });
+
   } catch (error) {
-    console.error("getProjectForms:", error);
+    console.error(
+      "Get project forms error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1661,10 +1843,11 @@ const getProjectForms = async (req, res) => {
 };
 
 
-/* ============================================================
-   FORM DETAILS
-   GET /api/v1/super-admin/forms/:formId
-============================================================ */
+// ============================================================
+// GET FORM DETAILS
+//
+// GET /api/v1/super-admin/forms/:formId
+// ============================================================
 
 const getFormDetails = async (req, res) => {
   try {
@@ -1681,7 +1864,14 @@ const getFormDetails = async (req, res) => {
             projectId: true,
             name: true,
             slug: true,
-            tenantId: true,
+
+            tenant: {
+              select: {
+                tenantId: true,
+                name: true,
+                slug: true,
+              },
+            },
           },
         },
 
@@ -1705,8 +1895,12 @@ const getFormDetails = async (req, res) => {
       success: true,
       data: form,
     });
+
   } catch (error) {
-    console.error("getFormDetails:", error);
+    console.error(
+      "Get form details error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1716,10 +1910,13 @@ const getFormDetails = async (req, res) => {
 };
 
 
-/* ============================================================
-   FORM FIELDS
-   GET /api/v1/super-admin/forms/:formId/fields
-============================================================ */
+// ============================================================
+// GET FORM FIELDS
+//
+// GET /api/v1/super-admin/forms/:formId/fields
+//
+// NO PAGINATION
+// ============================================================
 
 const getFormFields = async (req, res) => {
   try {
@@ -1737,10 +1934,15 @@ const getFormFields = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      count: fields.length,
       data: fields,
     });
+
   } catch (error) {
-    console.error("getFormFields:", error);
+    console.error(
+      "Get form fields error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1750,22 +1952,24 @@ const getFormFields = async (req, res) => {
 };
 
 
-/* ============================================================
-   FORM SUBMISSIONS
-   GET /api/v1/super-admin/forms/:formId/submissions
-============================================================ */
+// ============================================================
+// GET FORM SUBMISSIONS / RESPONSES
+//
+// GET /api/v1/super-admin/forms/:formId/submissions
+//
+// PAGINATION
+//
+// Example:
+// ?page=1&limit=25
+// ============================================================
 
 const getFormSubmissions = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    let { page = 1, limit = 25 } = req.query;
+    const { page, limit, skip } = getPagination(req);
 
-    page = Math.max(parseInt(page) || 1, 1);
-    limit = Math.min(Math.max(parseInt(limit) || 25, 1), 100);
-
-    const skip = (page - 1) * limit;
-
+    // Check form
     const form = await prisma.form.findUnique({
       where: {
         formId,
@@ -1774,8 +1978,7 @@ const getFormSubmissions = async (req, res) => {
       select: {
         formId: true,
         name: true,
-        slug: true,
-        projectId: true,
+        status: true,
       },
     });
 
@@ -1792,20 +1995,14 @@ const getFormSubmissions = async (req, res) => {
           formId,
         },
 
+        skip,
+        take: limit,
+
         orderBy: {
           createdAt: "desc",
         },
 
-        skip,
-        take: limit,
-
-        select: {
-          submissionId: true,
-          formId: true,
-          data: true,
-          createdAt: true,
-          updatedAt: true,
-
+        include: {
           _count: {
             select: {
               media: true,
@@ -1828,15 +2025,18 @@ const getFormSubmissions = async (req, res) => {
 
       data: submissions,
 
-      pagination: {
+      pagination: buildPagination(
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+        total
+      ),
     });
+
   } catch (error) {
-    console.error("getFormSubmissions:", error);
+    console.error(
+      "Get form submissions error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -1846,40 +2046,138 @@ const getFormSubmissions = async (req, res) => {
 };
 
 
-/* ============================================================
-   SUBMISSION DETAILS
-   GET /api/v1/super-admin/submissions/:submissionId
-============================================================ */
+// ============================================================
+// GET FORM / RESPONSE MEDIA
+//
+// GET /api/v1/super-admin/forms/:formId/media
+//
+// PAGINATION
+//
+// This returns media belonging to submissions
+// inside this form.
+// ============================================================
+
+const getFormMedia = async (req, res) => {
+  try {
+    const { formId } = req.params;
+
+    const { page, limit, skip } = getPagination(req);
+
+    // Check form
+    const form = await prisma.form.findUnique({
+      where: {
+        formId,
+      },
+
+      select: {
+        formId: true,
+        name: true,
+        status: true,
+      },
+    });
+
+    if (!form) {
+      return res.status(404).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    const [media, total] = await Promise.all([
+      prisma.media.findMany({
+        where: {
+          submission: {
+            formId,
+          },
+        },
+
+        skip,
+        take: limit,
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.media.count({
+        where: {
+          submission: {
+            formId,
+          },
+        },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+
+      form,
+
+      data: media,
+
+      pagination: buildPagination(
+        page,
+        limit,
+        total
+      ),
+    });
+
+  } catch (error) {
+    console.error(
+      "Get form media error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch form media",
+    });
+  }
+};
+
+
+// ============================================================
+// SUBMISSION / RESPONSE
+// ============================================================
+
+// ============================================================
+// GET SUBMISSION DETAILS
+//
+// GET /api/v1/super-admin/submissions/:submissionId
+//
+// Media is included.
+// ============================================================
 
 const getSubmissionDetails = async (req, res) => {
   try {
     const { submissionId } = req.params;
 
-    const submission = await prisma.formSubmission.findUnique({
-      where: {
-        submissionId,
-      },
+    const submission =
+      await prisma.formSubmission.findUnique({
+        where: {
+          submissionId,
+        },
 
-      include: {
-        form: {
-          select: {
-            formId: true,
-            name: true,
-            slug: true,
+        include: {
+          form: {
+            select: {
+              formId: true,
+              name: true,
+              slug: true,
 
-            project: {
-              select: {
-                projectId: true,
-                name: true,
-                tenantId: true,
+              project: {
+                select: {
+                  projectId: true,
+                  name: true,
+                  slug: true,
+                },
               },
             },
           },
-        },
 
-        media: true,
-      },
-    });
+          media: true,
+        },
+      });
 
     if (!submission) {
       return res.status(404).json({
@@ -1892,138 +2190,63 @@ const getSubmissionDetails = async (req, res) => {
       success: true,
       data: submission,
     });
+
   } catch (error) {
-    console.error("getSubmissionDetails:", error);
+    console.error(
+      "Get submission details error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch submission",
-    });
-  }
-};
-
-
-/* ============================================================
-   SUBMISSION MEDIA
-   GET /api/v1/super-admin/submissions/:submissionId/media
-============================================================ */
-
-const getSubmissionMedia = async (req, res) => {
-  try {
-    const { submissionId } = req.params;
-
-    const media = await prisma.media.findMany({
-      where: {
-        submissionId,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: media,
-    });
-  } catch (error) {
-    console.error("getSubmissionMedia:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch submission media",
-    });
-  }
-};
-
-
-/* ============================================================
-   PROJECT USERS
-   GET /api/v1/super-admin/projects/:projectId/users
-============================================================ */
-
-const getProjectUsers = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-
-    const users = await prisma.userProjectAccess.findMany({
-      where: {
-        projectId,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-
-      include: {
-        user: {
-          select: {
-            userId: true,
-            name: true,
-            email: true,
-            role: true,
-            isEmailVerified: true,
-            lastLoginAt: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: users,
-    });
-  } catch (error) {
-    console.error("getProjectUsers:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch project users",
+      message: "Failed to fetch submission details",
     });
   }
 };
 
 
 // ============================================================
-// EXPORT
+// EXPORTS
 // ============================================================
 
 module.exports = {
 
-  // Super Admin
-  createSuperAdmin,
-  getDashboard,
+   // Super Admin
+   createSuperAdmin,
+   getDashboard,
+ 
+   // Tenant
+   getTenantList,
+   getTenantDetails,
+   getTenantAdmin,
+   getTenantUsers,
+   getTenantSubscription,
+   getTenantSubscriptionHistory,
+   getTenantPaymentHistory,
+   getTenantUsage,
+   getTenantProjects,
+   getTenantForms,
 
-  // Tenant
-  getTenantList,
-  getTenantDetails,
-  getTenantAdmin,
-  getTenantUsers,
-  getTenantSubscription,
-  getTenantSubscriptionHistory,
-  getTenantPaymentHistory,
-  getTenantUsage,
-  getTenantProjects,
-  getTenantForms,
-
-
-
-  ///
+  // Project
   getProjectDetails,
   getProjectCollections,
+
+  // Collection
   getCollectionDetails,
   getCollectionFields,
   getCollectionRecords,
+  getCollectionMedia,
+
+  // Record
   getRecordDetails,
-  getRecordMedia,
-  getProjectApiKeys,
+
+  // Form
   getProjectForms,
   getFormDetails,
   getFormFields,
   getFormSubmissions,
-  getSubmissionDetails,
-  getSubmissionMedia,
-  getProjectUsers,
-};
+  getFormMedia,
 
+  // Submission
+  getSubmissionDetails,
+};
