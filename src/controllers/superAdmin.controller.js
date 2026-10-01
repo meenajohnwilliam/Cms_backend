@@ -1194,7 +1194,7 @@ const getTenantForms = async (req, res) => {
 
 const getPagination = (req) => {
   let page = Number(req.query.page) || 1;
-  let limit = Number(req.query.limit) || 25;
+  let limit = Number(req.query.limit) || 2;
 
   page = Math.max(page, 1);
   limit = Math.min(Math.max(limit, 1), 100);

@@ -221,12 +221,7 @@ router.get(
     getProjectCollections
   );
   
-  router.get(
-    "/projects/:projectId/forms",
-    authMiddleware,
-    roleMiddleware("SUPER_ADMIN"),
-    getProjectForms
-  );
+
   
   
   // ============================================================
@@ -271,8 +266,16 @@ router.get(
     authMiddleware,
     roleMiddleware("SUPER_ADMIN"),
     getRecordDetails
-  );
+  );/////not usee
   
+
+
+  router.get(
+    "/projects/:projectId/forms",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    getProjectForms
+  );
   
   // ============================================================
   // FORM
