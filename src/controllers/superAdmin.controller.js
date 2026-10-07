@@ -600,6 +600,278 @@ const getTenantDetails = async (req, res) => {
   }
 };
 
+// ============================================================
+// UPDATE TENANT
+// PATCH /api/v1/super-admin/tenants/:tenantId
+// ============================================================
+
+const updateTenant = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { name, slug } = req.body;
+
+    // --------------------------------------------------------
+    // CHECK TENANT EXISTS
+    // --------------------------------------------------------
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    // --------------------------------------------------------
+    // BUILD UPDATE DATA
+    // --------------------------------------------------------
+
+    const data = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid tenant name is required",
+        });
+      }
+
+      data.name = name.trim();
+    }
+
+    if (slug !== undefined) {
+      if (typeof slug !== "string" || !slug.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid tenant slug is required",
+        });
+      }
+
+      const newSlug = slug.trim().toLowerCase();
+
+      // ------------------------------------------------------
+      // CHECK SLUG AVAILABILITY
+      // ------------------------------------------------------
+
+      if (newSlug !== tenant.slug) {
+        const existingTenant = await prisma.tenant.findUnique({
+          where: {
+            slug: newSlug,
+          },
+        });
+
+        if (existingTenant) {
+          return res.status(409).json({
+            success: false,
+            message: "Tenant slug already exists",
+          });
+        }
+      }
+
+      data.slug = newSlug;
+    }
+
+    // --------------------------------------------------------
+    // NOTHING TO UPDATE
+    // --------------------------------------------------------
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Nothing to update",
+      });
+    }
+
+    // --------------------------------------------------------
+    // UPDATE TENANT
+    // --------------------------------------------------------
+
+    const updatedTenant = await prisma.tenant.update({
+      where: {
+        tenantId,
+      },
+
+      data,
+
+      select: {
+        tenantId: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant updated successfully",
+      tenant: updatedTenant,
+    });
+
+  } catch (error) {
+    console.error("Update Tenant Error:", error);
+
+    // Prisma unique constraint
+    if (error.code === "P2002") {
+      return res.status(409).json({
+        success: false,
+        message: "Tenant slug already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update tenant",
+    });
+  }
+};
+
+
+
+// ============================================================
+// ACTIVATE TENANT
+// POST /api/v1/super-admin/tenants/:tenantId/activate
+// ============================================================
+
+const activateTenant = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+
+      select: {
+        tenantId: true,
+        isActive: true,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    if (tenant.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant is already active",
+      });
+    }
+
+    const updatedTenant = await prisma.tenant.update({
+      where: {
+        tenantId,
+      },
+
+      data: {
+        isActive: true,
+      },
+
+      select: {
+        tenantId: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant activated successfully",
+      tenant: updatedTenant,
+    });
+
+  } catch (error) {
+    console.error("Activate Tenant Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to activate tenant",
+    });
+  }
+};
+
+
+
+// ============================================================
+// DEACTIVATE TENANT
+// POST /api/v1/super-admin/tenants/:tenantId/deactivate
+// ============================================================
+
+const deactivateTenant = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+
+      select: {
+        tenantId: true,
+        isActive: true,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    if (!tenant.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant is already inactive",
+      });
+    }
+
+    const updatedTenant = await prisma.tenant.update({
+      where: {
+        tenantId,
+      },
+
+      data: {
+        isActive: false,
+      },
+
+      select: {
+        tenantId: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant deactivated successfully",
+      tenant: updatedTenant,
+    });
+
+  } catch (error) {
+    console.error("Deactivate Tenant Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to deactivate tenant",
+    });
+  }
+};
+
 
 
 // ============================================================
@@ -658,6 +930,287 @@ const getTenantAdmin = async (req, res) => {
   }
 };
 
+// ============================================================
+// UPDATE TENANT ADMIN
+// PATCH /api/v1/super-admin/tenants/:tenantId/admin
+// ============================================================
+
+const updateTenantAdmin = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { name, email } = req.body;
+
+    // --------------------------------------------------------
+    // CHECK TENANT
+    // --------------------------------------------------------
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    // --------------------------------------------------------
+    // FIND ADMIN
+    // --------------------------------------------------------
+
+    const admin = await prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: "ADMIN",
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant admin not found",
+      });
+    }
+
+    // --------------------------------------------------------
+    // BUILD UPDATE DATA
+    // --------------------------------------------------------
+
+    const data = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid admin name is required",
+        });
+      }
+
+      data.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== "string" || !email.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid admin email is required",
+        });
+      }
+
+      data.email = email.trim().toLowerCase();
+    }
+
+    // --------------------------------------------------------
+    // NOTHING TO UPDATE
+    // --------------------------------------------------------
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Nothing to update",
+      });
+    }
+
+    // --------------------------------------------------------
+    // UPDATE ADMIN
+    // --------------------------------------------------------
+
+    const updatedAdmin = await prisma.user.update({
+      where: {
+        userId: admin.userId,
+      },
+
+      data,
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        isEmailVerified: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant admin updated successfully",
+      admin: updatedAdmin,
+    });
+
+  } catch (error) {
+    console.error("Update Tenant Admin Error:", error);
+
+    // User.email is unique
+    if (error.code === "P2002") {
+      return res.status(409).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update tenant admin",
+    });
+  }
+};
+
+
+// ============================================================
+// ACTIVATE TENANT ADMIN
+// POST /api/v1/super-admin/tenants/:tenantId/admin/activate
+// ============================================================
+
+const activateTenantAdmin = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const admin = await prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: "ADMIN",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant admin not found",
+      });
+    }
+
+    if (admin.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant admin is already active",
+      });
+    }
+
+    const updatedAdmin = await prisma.user.update({
+      where: {
+        userId: admin.userId,
+      },
+
+      data: {
+        isActive: true,
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant admin activated successfully",
+      admin: updatedAdmin,
+    });
+
+  } catch (error) {
+    console.error("Activate Tenant Admin Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to activate tenant admin",
+    });
+  }
+};
+
+
+
+// ============================================================
+// DEACTIVATE TENANT ADMIN
+// POST /api/v1/super-admin/tenants/:tenantId/admin/deactivate
+// ============================================================
+
+const deactivateTenantAdmin = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const admin = await prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: "ADMIN",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant admin not found",
+      });
+    }
+
+    if (!admin.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Tenant admin is already inactive",
+      });
+    }
+
+    const updatedAdmin = await prisma.user.update({
+      where: {
+        userId: admin.userId,
+      },
+
+      data: {
+        isActive: false,
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant admin deactivated successfully",
+      admin: updatedAdmin,
+    });
+
+  } catch (error) {
+    console.error("Deactivate Tenant Admin Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to deactivate tenant admin",
+    });
+  }
+};
+
 
 
 // ============================================================
@@ -709,6 +1262,289 @@ const getTenantUsers = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch tenant users",
+    });
+  }
+};
+
+// ============================================================
+// UPDATE TENANT USER
+// PATCH /api/v1/super-admin/tenants/:tenantId/users/:userId
+// ============================================================
+
+const updateTenantUser = async (req, res) => {
+  try {
+    const { tenantId, userId } = req.params;
+    const { name, email } = req.body;
+
+    // --------------------------------------------------------
+    // CHECK TENANT
+    // --------------------------------------------------------
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    // --------------------------------------------------------
+    // CHECK USER BELONGS TO TENANT
+    // --------------------------------------------------------
+
+    const user = await prisma.user.findFirst({
+      where: {
+        userId,
+        tenantId,
+        role: "USER",
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant user not found",
+      });
+    }
+
+    // --------------------------------------------------------
+    // BUILD UPDATE DATA
+    // --------------------------------------------------------
+
+    const data = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid user name is required",
+        });
+      }
+
+      data.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== "string" || !email.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid user email is required",
+        });
+      }
+
+      data.email = email.trim().toLowerCase();
+    }
+
+    // --------------------------------------------------------
+    // NOTHING TO UPDATE
+    // --------------------------------------------------------
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Nothing to update",
+      });
+    }
+
+    // --------------------------------------------------------
+    // UPDATE USER
+    // --------------------------------------------------------
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        userId,
+      },
+
+      data,
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        isEmailVerified: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant user updated successfully",
+      user: updatedUser,
+    });
+
+  } catch (error) {
+    console.error("Update Tenant User Error:", error);
+
+    if (error.code === "P2002") {
+      return res.status(409).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update tenant user",
+    });
+  }
+};
+
+
+// ============================================================
+// ACTIVATE TENANT USER
+// POST /api/v1/super-admin/tenants/:tenantId/users/:userId/activate
+// ============================================================
+
+const activateTenantUser = async (req, res) => {
+  try {
+    const { tenantId, userId } = req.params;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        userId,
+        tenantId,
+        role: "USER",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant user not found",
+      });
+    }
+
+    if (user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "User is already active",
+      });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        userId,
+      },
+
+      data: {
+        isActive: true,
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User activated successfully",
+      user: updatedUser,
+    });
+
+  } catch (error) {
+    console.error("Activate Tenant User Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to activate user",
+    });
+  }
+};
+
+
+
+// ============================================================
+// DEACTIVATE TENANT USER
+// POST /api/v1/super-admin/tenants/:tenantId/users/:userId/deactivate
+// ============================================================
+
+const deactivateTenantUser = async (req, res) => {
+  try {
+    const { tenantId, userId } = req.params;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        userId,
+        tenantId,
+        role: "USER",
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant user not found",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "User is already inactive",
+      });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        userId,
+      },
+
+      data: {
+        isActive: false,
+      },
+
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User deactivated successfully",
+      user: updatedUser,
+    });
+
+  } catch (error) {
+    console.error("Deactivate Tenant User Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to deactivate user",
     });
   }
 };
@@ -894,6 +1730,547 @@ const getTenantSubscriptionHistory = async (req, res) => {
 };
 
 
+// ============================================================
+// CHANGE TENANT SUBSCRIPTION PLAN
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/subscription/change-plan
+// ============================================================
+
+const changeTenantSubscriptionPlan = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { planId, billingCycle } = req.body;
+
+    // ----------------------------------------------------------
+    // VALIDATION
+    // ----------------------------------------------------------
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        message: "planId is required",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // CHECK TENANT
+    // ----------------------------------------------------------
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+      select: {
+        tenantId: true,
+        name: true,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // CHECK PLAN
+    // ----------------------------------------------------------
+
+    const plan = await prisma.plan.findUnique({
+      where: {
+        planId,
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: "Plan not found",
+      });
+    }
+
+    if (!plan.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Selected plan is inactive",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // FIND ACTIVE SUBSCRIPTION
+    // ----------------------------------------------------------
+
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        tenantId,
+        status: "ACTIVE",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Active subscription not found",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // UPDATE PLAN
+    // ----------------------------------------------------------
+
+    const updatedSubscription =
+      await prisma.subscription.update({
+        where: {
+          subscriptionId: subscription.subscriptionId,
+        },
+
+        data: {
+          planId,
+
+          billingCycle:
+            billingCycle || subscription.billingCycle,
+
+          planPrice: plan.price,
+        },
+
+        include: {
+          plan: true,
+        },
+      });
+
+    // ----------------------------------------------------------
+    // RESPONSE
+    // ----------------------------------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription plan changed successfully",
+
+      subscription: {
+        subscriptionId:
+          updatedSubscription.subscriptionId,
+
+        tenantId:
+          updatedSubscription.tenantId,
+
+        planId:
+          updatedSubscription.planId,
+
+        planName:
+          updatedSubscription.plan.name,
+
+        planVersion:
+          updatedSubscription.plan.version,
+
+        billingCycle:
+          updatedSubscription.billingCycle,
+
+        planPrice:
+          updatedSubscription.planPrice,
+
+        status:
+          updatedSubscription.status,
+
+        startDate:
+          updatedSubscription.startDate,
+
+        endDate:
+          updatedSubscription.endDate,
+
+        updatedAt:
+          updatedSubscription.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Change Tenant Subscription Plan Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to change subscription plan",
+    });
+  }
+};
+
+
+// ============================================================
+// SUSPEND TENANT SUBSCRIPTION
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/subscription/suspend
+// ============================================================
+
+const suspendTenantSubscription = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: "ACTIVE",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Active subscription not found",
+      });
+    }
+
+    const updatedSubscription =
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            subscription.subscriptionId,
+        },
+
+        data: {
+          status: "SUSPENDED",
+        },
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription suspended successfully",
+
+      subscription: {
+        subscriptionId:
+          updatedSubscription.subscriptionId,
+
+        tenantId:
+          updatedSubscription.tenantId,
+
+        status:
+          updatedSubscription.status,
+
+        startDate:
+          updatedSubscription.startDate,
+
+        endDate:
+          updatedSubscription.endDate,
+
+        updatedAt:
+          updatedSubscription.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Suspend Tenant Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to suspend subscription",
+    });
+  }
+};
+
+
+// ============================================================
+// ACTIVATE TENANT SUBSCRIPTION
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/subscription/activate
+// ============================================================
+
+const activateTenantSubscription = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: "SUSPENDED",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Suspended subscription not found",
+      });
+    }
+
+    const updatedSubscription =
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            subscription.subscriptionId,
+        },
+
+        data: {
+          status: "ACTIVE",
+        },
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription activated successfully",
+
+      subscription: {
+        subscriptionId:
+          updatedSubscription.subscriptionId,
+
+        tenantId:
+          updatedSubscription.tenantId,
+
+        status:
+          updatedSubscription.status,
+
+        startDate:
+          updatedSubscription.startDate,
+
+        endDate:
+          updatedSubscription.endDate,
+
+        updatedAt:
+          updatedSubscription.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Activate Tenant Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to activate subscription",
+    });
+  }
+};
+
+
+
+// ============================================================
+// CANCEL TENANT SUBSCRIPTION
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/subscription/cancel
+// ============================================================
+
+const cancelTenantSubscription = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: {
+            in: [
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+            ],
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Subscription not found",
+      });
+    }
+
+    const updatedSubscription =
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            subscription.subscriptionId,
+        },
+
+        data: {
+          status: "CANCELLED",
+        },
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription cancelled successfully",
+
+      subscription: {
+        subscriptionId:
+          updatedSubscription.subscriptionId,
+
+        tenantId:
+          updatedSubscription.tenantId,
+
+        status:
+          updatedSubscription.status,
+
+        startDate:
+          updatedSubscription.startDate,
+
+        endDate:
+          updatedSubscription.endDate,
+
+        updatedAt:
+          updatedSubscription.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Cancel Tenant Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to cancel subscription",
+    });
+  }
+};
+
+
+// ============================================================
+// EXTEND TENANT SUBSCRIPTION
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/subscription/extend
+// ============================================================
+
+const extendTenantSubscription = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { days } = req.body;
+
+    // ----------------------------------------------------------
+    // VALIDATION
+    // ----------------------------------------------------------
+
+    if (!days || !Number.isInteger(Number(days))) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid number of days is required",
+      });
+    }
+
+    if (Number(days) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Days must be greater than 0",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // FIND SUBSCRIPTION
+    // ----------------------------------------------------------
+
+    const subscription =
+      await prisma.subscription.findFirst({
+        where: {
+          tenantId,
+          status: {
+            in: [
+              "ACTIVE",
+              "GRACE_PERIOD",
+              "PAST_DUE",
+            ],
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: "Active subscription not found",
+      });
+    }
+
+    // ----------------------------------------------------------
+    // CALCULATE NEW END DATE
+    // ----------------------------------------------------------
+
+    const currentEndDate =
+      new Date(subscription.endDate);
+
+    currentEndDate.setDate(
+      currentEndDate.getDate() + Number(days)
+    );
+
+    // ----------------------------------------------------------
+    // UPDATE
+    // ----------------------------------------------------------
+
+    const updatedSubscription =
+      await prisma.subscription.update({
+        where: {
+          subscriptionId:
+            subscription.subscriptionId,
+        },
+
+        data: {
+          endDate: currentEndDate,
+        },
+      });
+
+    // ----------------------------------------------------------
+    // RESPONSE
+    // ----------------------------------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: `Subscription extended by ${days} days`,
+
+      subscription: {
+        subscriptionId:
+          updatedSubscription.subscriptionId,
+
+        tenantId:
+          updatedSubscription.tenantId,
+
+        status:
+          updatedSubscription.status,
+
+        startDate:
+          updatedSubscription.startDate,
+
+        endDate:
+          updatedSubscription.endDate,
+
+        updatedAt:
+          updatedSubscription.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Extend Tenant Subscription Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to extend subscription",
+    });
+  }
+};
+
 
 // ============================================================
 // GET TENANT PAYMENT HISTORY
@@ -1044,6 +2421,197 @@ const getTenantUsage = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch tenant usage",
+    });
+  }
+};
+
+
+// ============================================================
+// RESET TENANT USAGE
+// ============================================================
+// POST /api/v1/super-admin/tenants/:tenantId/usage/reset
+// ============================================================
+
+const resetTenantUsage = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { password } = req.body;
+
+    // ========================================================
+    // VALIDATE PASSWORD
+    // ========================================================
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Super Admin password is required",
+      });
+    }
+
+    // ========================================================
+    // GET LOGGED-IN SUPER ADMIN
+    // ========================================================
+
+    const superAdmin = await prisma.user.findUnique({
+      where: {
+        userId: req.user.userId,
+      },
+      select: {
+        userId: true,
+        role: true,
+        password: true,
+        isActive: true,
+      },
+    });
+
+    if (!superAdmin) {
+      return res.status(401).json({
+        success: false,
+        message: "Super Admin not found",
+      });
+    }
+
+    // ========================================================
+    // CHECK ROLE
+    // ========================================================
+
+    if (superAdmin.role !== "SUPER_ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Super Admin access required",
+      });
+    }
+
+    // ========================================================
+    // CHECK ADMIN ACTIVE
+    // ========================================================
+
+    if (!superAdmin.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Super Admin account is inactive",
+      });
+    }
+
+    // ========================================================
+    // VERIFY PASSWORD
+    // ========================================================
+
+    const passwordMatch = await bcrypt.compare(
+      password,
+      superAdmin.password
+    );
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Super Admin password",
+      });
+    }
+
+    // ========================================================
+    // CHECK TENANT
+    // ========================================================
+
+    const tenant = await prisma.tenant.findUnique({
+      where: {
+        tenantId,
+      },
+      select: {
+        tenantId: true,
+        name: true,
+      },
+    });
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    // ========================================================
+    // CHECK USAGE
+    // ========================================================
+
+    const usage = await prisma.usage.findUnique({
+      where: {
+        tenantId,
+      },
+    });
+
+    if (!usage) {
+      return res.status(404).json({
+        success: false,
+        message: "Usage data not found",
+      });
+    }
+
+    // ========================================================
+    // RESET USAGE
+    // ========================================================
+
+    const updatedUsage = await prisma.usage.update({
+      where: {
+        tenantId,
+      },
+      data: {
+        getRequestsUsed: 0,
+        writeRequestsUsed: 0,
+        usageResetAt: new Date(),
+      },
+    });
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(200).json({
+      success: true,
+      message: "Tenant usage reset successfully",
+
+      usage: {
+        usageId: updatedUsage.usageId,
+        tenantId: updatedUsage.tenantId,
+
+        storageUsedBytes:
+          updatedUsage.storageUsedBytes?.toString() || "0",
+
+        getRequestsUsed:
+          updatedUsage.getRequestsUsed,
+
+        writeRequestsUsed:
+          updatedUsage.writeRequestsUsed,
+
+        apiKeysUsed:
+          updatedUsage.apiKeysUsed,
+
+        projectsUsed:
+          updatedUsage.projectsUsed,
+
+        collectionsUsed:
+          updatedUsage.collectionsUsed,
+
+        teamMembersUsed:
+          updatedUsage.teamMembersUsed,
+
+        usageResetAt:
+          updatedUsage.usageResetAt,
+
+        updatedAt:
+          updatedUsage.updatedAt,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Reset Tenant Usage Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset tenant usage",
     });
   }
 };
@@ -1691,60 +3259,60 @@ const getCollectionMedia = async (req, res) => {
 // No separate media API required when opening one record.
 // ============================================================
 
-const getRecordDetails = async (req, res) => {
-  try {
-    const { recordId } = req.params;
+// const getRecordDetails = async (req, res) => {
+//   try {
+//     const { recordId } = req.params;
 
-    const record = await prisma.record.findUnique({
-      where: {
-        recordId,
-      },
+//     const record = await prisma.record.findUnique({
+//       where: {
+//         recordId,
+//       },
 
-      include: {
-        collection: {
-          select: {
-            collectionId: true,
-            name: true,
-            slug: true,
+//       include: {
+//         collection: {
+//           select: {
+//             collectionId: true,
+//             name: true,
+//             slug: true,
 
-            project: {
-              select: {
-                projectId: true,
-                name: true,
-                slug: true,
-              },
-            },
-          },
-        },
+//             project: {
+//               select: {
+//                 projectId: true,
+//                 name: true,
+//                 slug: true,
+//               },
+//             },
+//           },
+//         },
 
-        media: true,
-      },
-    });
+//         media: true,
+//       },
+//     });
 
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        message: "Record not found",
-      });
-    }
+//     if (!record) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Record not found",
+//       });
+//     }
 
-    return res.status(200).json({
-      success: true,
-      data: record,
-    });
+//     return res.status(200).json({
+//       success: true,
+//       data: record,
+//     });
 
-  } catch (error) {
-    console.error(
-      "Get record details error:",
-      error
-    );
+//   } catch (error) {
+//     console.error(
+//       "Get record details error:",
+//       error
+//     );
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch record details",
-    });
-  }
-};
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch record details",
+//     });
+//   }
+// };
 
 
 // ============================================================
@@ -2216,14 +3784,32 @@ module.exports = {
    getDashboard,
  
    // Tenant
-   getTenantList,
-   getTenantDetails,
-   getTenantAdmin,
-   getTenantUsers,
+     getTenantList,
+     getTenantDetails,
+     updateTenant,
+     activateTenant,
+     deactivateTenant,
+     
+     getTenantAdmin,
+     updateTenantAdmin,
+     activateTenantAdmin,
+     deactivateTenantAdmin,
+   
+     getTenantUsers,
+     updateTenantUser,
+     activateTenantUser,
+     deactivateTenantUser,
+
    getTenantSubscription,
    getTenantSubscriptionHistory,
+   changeTenantSubscriptionPlan,
+   suspendTenantSubscription,
+   activateTenantSubscription,
+   cancelTenantSubscription,
+   extendTenantSubscription,
    getTenantPaymentHistory,
    getTenantUsage,
+   resetTenantUsage,
    getTenantProjects,
    getTenantForms,
 
@@ -2237,8 +3823,8 @@ module.exports = {
   getCollectionRecords,
   getCollectionMedia,
 
-  // Record
-  getRecordDetails,
+  // // Record
+  // getRecordDetails,
 
   // Form
   getProjectForms,

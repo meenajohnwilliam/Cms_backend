@@ -7,12 +7,30 @@ const {
   // Tenant APIs
   getTenantList,
   getTenantDetails,
+  updateTenant,
+  activateTenant,
+  deactivateTenant,
+  
   getTenantAdmin,
+  updateTenantAdmin,
+  activateTenantAdmin,
+  deactivateTenantAdmin,
+
   getTenantUsers,
+  updateTenantUser,
+  activateTenantUser,
+  deactivateTenantUser,
+
   getTenantSubscription,
   getTenantSubscriptionHistory,
+  changeTenantSubscriptionPlan,
+  suspendTenantSubscription,
+  activateTenantSubscription,
+  cancelTenantSubscription,
+  extendTenantSubscription,
   getTenantPaymentHistory,
   getTenantUsage,
+  resetTenantUsage,
   getTenantProjects,
   getTenantForms,
 
@@ -30,7 +48,7 @@ const {
   getCollectionMedia,
 
   // Record
-  getRecordDetails,
+//   getRecordDetails,
 
   // Form
   getProjectForms,
@@ -97,6 +115,32 @@ router.get(
 );
 
 
+
+// Edit tenant
+router.patch(
+    "/tenants/:tenantId",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    updateTenant
+  );
+  
+  // Activate tenant
+  router.post(
+    "/tenants/:tenantId/activate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    activateTenant
+  );
+  
+  // Deactivate tenant
+  router.post(
+    "/tenants/:tenantId/deactivate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    deactivateTenant
+  );
+
+
 // ============================================================
 // TENANT ADMIN
 // ============================================================
@@ -109,6 +153,30 @@ router.get(
   getTenantAdmin
 );
 
+// Edit tenant admin
+router.patch(
+    "/tenants/:tenantId/admin",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    updateTenantAdmin
+  );
+  
+  // Activate tenant admin
+  router.post(
+    "/tenants/:tenantId/admin/activate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    activateTenantAdmin
+  );
+  
+  // Deactivate tenant admin
+  router.post(
+    "/tenants/:tenantId/admin/deactivate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    deactivateTenantAdmin
+  );
+  
 
 // ============================================================
 // TENANT USERS
@@ -121,6 +189,30 @@ router.get(
   roleMiddleware("SUPER_ADMIN"),
   getTenantUsers
 );
+
+// Edit tenant user
+router.patch(
+    "/tenants/:tenantId/users/:userId",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    updateTenantUser
+  );
+  
+  // Activate tenant user
+  router.post(
+    "/tenants/:tenantId/users/:userId/activate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    activateTenantUser
+  );
+  
+  // Deactivate tenant user
+  router.post(
+    "/tenants/:tenantId/users/:userId/deactivate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    deactivateTenantUser
+  );
 
 
 // ============================================================
@@ -149,6 +241,51 @@ router.get(
 );
 
 
+// CHANGE PLAN
+router.post(
+    "/tenants/:tenantId/subscription/change-plan",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    changeTenantSubscriptionPlan
+  );
+  
+  
+  // SUSPEND
+  router.post(
+    "/tenants/:tenantId/subscription/suspend",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    suspendTenantSubscription
+  );
+  
+  
+  // ACTIVATE
+  router.post(
+    "/tenants/:tenantId/subscription/activate",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    activateTenantSubscription
+  );
+  
+  
+  // CANCEL
+  router.post(
+    "/tenants/:tenantId/subscription/cancel",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    cancelTenantSubscription
+  );
+  
+  
+  // EXTEND
+  router.post(
+    "/tenants/:tenantId/subscription/extend",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    extendTenantSubscription
+  );
+
+
 // ============================================================
 // PAYMENT HISTORY
 // ============================================================
@@ -174,6 +311,14 @@ router.get(
   getTenantUsage
 );
 
+
+// RESET TENANT USAGE
+router.post(
+    "/tenants/:tenantId/usage/reset",
+    authMiddleware,
+    roleMiddleware("SUPER_ADMIN"),
+    resetTenantUsage
+  );
 
 // ============================================================
 // TENANT PROJECTS
@@ -261,12 +406,12 @@ router.get(
   // RECORD
   // ============================================================
   
-  router.get(
-    "/records/:recordId",
-    authMiddleware,
-    roleMiddleware("SUPER_ADMIN"),
-    getRecordDetails
-  );/////not usee
+//   router.get(
+//     "/records/:recordId",
+//     authMiddleware,
+//     roleMiddleware("SUPER_ADMIN"),
+//     getRecordDetails
+//   );/////not usee
   
 
 

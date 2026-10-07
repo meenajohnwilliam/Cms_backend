@@ -78,7 +78,32 @@ model Tenant {
   payments        Payment[]
   projects        Project[]
   usage           Usage?
+  paymentGateway TenantPaymentGateway?
 
+}
+
+model TenantPaymentGateway {
+  gatewayId String @id @default(cuid())
+  provider String @default("RAZORPAY")
+  keyId String
+  keySecret String
+  websiteUrl String?
+
+  // Connection state
+  isConnected Boolean @default(false)
+  lastVerifiedAt DateTime?
+
+  testPaymentId String?
+  testPaymentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId String @unique
+  tenant Tenant @relation(fields: [tenantId],references: [tenantId],onDelete: Cascade)
+
+  @@index([provider])
+  @@index([isConnected])
 }
 
 
@@ -88,6 +113,7 @@ model User {
   email           String   @unique
   password        String
   role            Role
+  isActive        Boolean  @default(true)
   isEmailVerified       Boolean  @default(false)
 
 
