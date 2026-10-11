@@ -46,63 +46,50 @@
 
 
 
+// const express = require("express");
+// const router = express.Router();
+
+// const {
+//   connectGateway,
+//   createTestOrder,
+//   getGatewayStatus,
+// } = require("../controllers/tenantPaymentGateway.controller");
+
+// const authTenant = require("../middleware/auth.middleware");
+
+// router.post("/connect", authTenant, connectGateway);
+// router.post("/test-order", authTenant, createTestOrder);
+// router.get("/status", authTenant, getGatewayStatus);
+
+// module.exports = router;
+
+
 const express = require("express");
-
-const {
-  updateRazorpayConfig,
-  getRazorpayConfig,
-  testRazorpayConnection,
-  razorpayWebhook,
-} = require("../controllers/tenantPaymentGateway.controller")
-const authMiddleware =
-  require("../middleware/auth.middleware");
-
 const router = express.Router();
 
+const authMiddleware = require("../middleware/auth.middleware");
+const roleMiddleware = require("../middleware/role.middleware");
 
-// ============================================================
-// GET RAZORPAY CONFIG
-// ============================================================
+const {
+  connectGateway,
+  createTestOrder,
+  getGatewayStatus
+} = require("../controllers/tenantPaymentGateway.controller");
 
-router.get(
-  "/config",
-//   authMiddleware,
-  getRazorpayConfig
+
+router.post("/api/v1/payment-gateway/connect",
+  authMiddleware, roleMiddleware("ADMIN"),
+  connectGateway
 );
 
-
-// ============================================================
-// SAVE / UPDATE RAZORPAY CONFIG
-// ============================================================
-
-router.put(
-  "/config",
-//   authMiddleware,
-  updateRazorpayConfig
+router.post("/api/v1/payment-gateway/test-order",
+  authMiddleware, roleMiddleware("ADMIN"),
+  createTestOrder
 );
 
-
-// ============================================================
-// TEST RAZORPAY CONNECTION
-// ============================================================
-
-router.post(
-  "/tenant/razorpay/test",
-//   authMiddleware,
-  testRazorpayConnection
-);
-
-
-// ============================================================
-// RAZORPAY WEBHOOK
-// ============================================================
-
-router.post(
-  "/razorpay",
-  express.raw({
-    type: "application/json",
-  }),
-  razorpayWebhook
+router.get("/api/v1/payment-gateway/status",
+  authMiddleware, roleMiddleware("ADMIN"),
+  getGatewayStatus
 );
 
 

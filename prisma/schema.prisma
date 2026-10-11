@@ -82,28 +82,74 @@ model Tenant {
 
 }
 
+
+enum GatewayConnectionStatus {
+  DISCONNECTED
+  CREDENTIALS_VERIFIED
+  WEBHOOK_PENDING
+  WEBHOOK_VERIFIED
+  TEST_PAYMENT_PENDING
+  CONNECTED
+  ERROR
+}
+
+enum CustomerPaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+}
+
 model TenantPaymentGateway {
-  gatewayId String @id @default(cuid())
-  provider String @default("RAZORPAY")
-  keyId String
-  keySecret String
-  websiteUrl String?
+  gatewayId          String   @id @default(cuid())
+  tenantId           String   @unique
+  tenant             Tenant   @relation(fields: [tenantId], references: [tenantId],onDelete: Cascade)
 
-  // Connection state
-  isConnected Boolean @default(false)
-  lastVerifiedAt DateTime?
+  provider           String   @default("RAZORPAY")
+  keyId              String
+  keySecret          String
+  webhookSecret      String   
+  websiteUrl         String?
+  isVerified         Boolean  @default(false)
+  connectionStatus   GatewayConnectionStatus @default(DISCONNECTED)
 
-  testPaymentId String?
-  testPaymentAt DateTime?
+  testPaymentOrderId String?  @unique
+  testPaymentId      String?
+  testPaymentAt      DateTime?
+  webhookVerifiedAt  DateTime?
+  lastVerifiedAt     DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tenantId String @unique
-  tenant Tenant @relation(fields: [tenantId],references: [tenantId],onDelete: Cascade)
+  @@index([connectionStatus])
+}
 
-  @@index([provider])
-  @@index([isConnected])
+model TenantPayment {
+  paymentId          String   @id @default(cuid())
+  tenantId           String
+
+  razorpayOrderId    String   @unique
+  razorpayPaymentId  String?  @unique
+
+  amount             Int
+  currency           String   @default("INR")
+  status             CustomerPaymentStatus @default(PENDING)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model RazorpayWebhookEvent {
+  id                 String   @id @default(cuid())
+  eventId            String   @unique
+  tenantId           String
+  event              String
+  processed          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  @@index([tenantId, createdAt])
 }
 
 

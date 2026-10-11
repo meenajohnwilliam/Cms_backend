@@ -20,7 +20,7 @@ const formSubmissionRoutes = require("./src/routes/formSubmission.routes");
 const usageRoutes = require("./src/routes/usage.routes") 
 const tenantRoutes = require("./src/routes/tenant.routes")
 const tenantPaymentGatewayRoutes = require("./src/routes/tenantPaymentGateway.routes");
-
+const {tenantRazorpayWebhook} = require("./src/controllers/tenantPaymentGateway.controller")
 
 
 
@@ -41,6 +41,16 @@ app.post("/api/v1/subscriptions/razorpay/webhook",
     }),
     razorpayWebhook
   );
+
+  // Public webhook: MUST use the raw body.
+app.post("/api/v1/webhooks/razorpay",
+  express.raw({ 
+    type: "application/json" 
+  }),
+  tenantRazorpayWebhook
+);
+
+
 
 
 
