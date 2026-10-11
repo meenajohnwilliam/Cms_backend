@@ -73,21 +73,24 @@ const roleMiddleware = require("../middleware/role.middleware");
 const {
   connectGateway,
   createTestOrder,
-  getGatewayStatus
+  getGatewayStatus,
+  testWebhookConnection
 } = require("../controllers/tenantPaymentGateway.controller");
 
 
-router.post("/api/v1/payment-gateway/connect",
+router.post("/config",
   authMiddleware, roleMiddleware("ADMIN"),
   connectGateway
 );
 
-router.post("/api/v1/payment-gateway/test-order",
+router.post("/webhook-test",testWebhookConnection)
+
+router.post("/test-order",
   authMiddleware, roleMiddleware("ADMIN"),
   createTestOrder
 );
 
-router.get("/api/v1/payment-gateway/status",
+router.get("/status",
   authMiddleware, roleMiddleware("ADMIN"),
   getGatewayStatus
 );

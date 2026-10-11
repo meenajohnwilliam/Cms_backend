@@ -1075,7 +1075,7 @@ const testWebhookConnection = async (req, res) => {
         .digest("hex");
   
       const webhookUrl =
-        `${process.env.PUBLIC_API_URL}/api/v1/webhooks/razorpay`;
+        `https://cms-backend-9nkz.onrender.com/api/v1/webhooks/razorpay`;
   
       const response = await fetch(webhookUrl, {
         method: "POST",
