@@ -1569,6 +1569,7 @@ const tenantRazorpayWebhook = async (req, res) => {
       await prisma.tenantPaymentGateway.update({
         where: { tenantId },
         data: {
+          isVerified:true,
           webhookVerifiedAt: new Date(),
           lastVerifiedAt: new Date(),
         },
