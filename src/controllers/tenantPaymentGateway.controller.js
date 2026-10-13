@@ -834,16 +834,12 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const prisma = require("../config/prisma");
+const axios = require("axios");
 
 // =====================================================
 // HELPER: CREATE RAZORPAY CLIENT
 // =====================================================
-const getRazorpay = (gateway) => {
-  return new Razorpay({
-    key_id: gateway.keyId,
-    key_secret: gateway.keySecret,
-  });
-};
+
 
 // =====================================================
 // HELPER: VERIFY WEBHOOK SIGNATURE
@@ -876,7 +872,7 @@ const verifyWebhookSignature = (rawBody, signature, secret) => {
 // =====================================================
 const connectGateway = async (req, res) => {
   try {
-    const tenantId = req.user?.tenantId;
+    const tenantId = "cmu10wts9000am51gie4iprm6";
 
     const {
       provider,
@@ -941,13 +937,7 @@ const connectGateway = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Credentials validated.",
-    //   data: {
-    //     webhookUrl:
-    //       `${process.env.PUBLIC_API_URL}/api/v1/webhooks/razorpay`,
-    //     webhookSecret,
-    //     connectionStatus: "WEBHOOK_PENDING",
-    //   },
+      message: "Successfully Credentials validated.",
     });
   } catch (error) {
     console.error("Connect gateway error:", error.message);
@@ -963,84 +953,13 @@ const connectGateway = async (req, res) => {
 // 2. CREATE ₹1 TEST ORDER
 // POST /api/v1/payment-gateway/test-order
 // =====================================================
+
 const createTestOrder = async (req, res) => {
-  try {
-    const tenantId = req.user.tenantId;
-
-    const gateway = await prisma.tenantPaymentGateway.findUnique({
-      where: { tenantId },
-    });
-
-    if (!gateway) {
-      return res.status(404).json({
-        success: false,
-        message: "Connect Razorpay first",
-      });
-    }
-
-    if (gateway.connectionStatus !== "WEBHOOK_VERIFIED") {
-      return res.status(400).json({
-        success: false,
-        message: "Verify webhook configuration first",
-      });
-    }
-
-    const razorpay = getRazorpay(gateway);
-
-    const order = await razorpay.orders.create({
-      amount: 100, // ₹1 = 100 paise
-      currency: "INR",
-      receipt: `test_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
-      notes: {
-        tenantId,
-        purpose: "gateway_connection_test",
-      },
-    });
-
-    await prisma.tenantPaymentGateway.update({
-      where: { tenantId },
-      data: {
-        testPaymentOrderId: order.id,
-        testPaymentId: null,
-        testPaymentAt: null,
-        isVerified: false,
-        connectionStatus: "TEST_PAYMENT_PENDING",
-      },
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Complete the ₹1 payment using Razorpay Checkout",
-      data: {
-        keyId: gateway.keyId,
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-      },
-    });
-  } catch (error) {
-    console.error("Test order error:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to create test order",
-    });
-  }
-};
-
-
-
-const testWebhookConnection = async (req, res) => {
     try {
-      const tenantId = req.user?.tenantId;
+      // 1. Get tenant ID
+      const tenantId = req.user?.tenantId || "cmu10wts9000am51gie4iprm6";
   
-      if (!tenantId) {
-        return res.status(401).json({
-          success: false,
-          message: "Tenant not found",
-        });
-      }
-  
+      // 2. Find tenant Razorpay configuration
       const gateway = await prisma.tenantPaymentGateway.findUnique({
         where: { tenantId },
       });
@@ -1048,70 +967,68 @@ const testWebhookConnection = async (req, res) => {
       if (!gateway) {
         return res.status(404).json({
           success: false,
-          message: "Connect Razorpay credentials first",
+          message: "Connect Razorpay first",
         });
       }
   
-      const payload = {
-        entity: "event",
-        event: "order.paid",
-        contains: ["order"],
-        payload: {
-          order: {
-            entity: {
-              id: "order_test_buildfree",
-              status: "paid",
-            },
-          },
-        },
-        created_at: Math.floor(Date.now() / 1000),
-      };
-  
-      const rawBody = JSON.stringify(payload);
-  
-      const signature = crypto
-        .createHmac("sha256", gateway.webhookSecret)
-        .update(rawBody)
-        .digest("hex");
-  
-      const webhookUrl =
-        `https://cms-backend-9nkz.onrender.com/api/v1/webhooks/razorpay`;
-  
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Razorpay-Signature": signature,
-        },
-        body: rawBody,
+      // 3. Create Razorpay instance
+      const razorpay = new Razorpay({
+        key_id: gateway.keyId,
+        key_secret: gateway.keySecret,
       });
   
-      const responseText = await response.text();
+      // 4. Create ₹1 test order
+      const order = await razorpay.orders.create({
+        amount: 100,
+        currency: "INR",
+        receipt: `test_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+        notes: {
+          tenantId,
+          purpose: "gateway_connection_test",
+        },
+      });
   
-      return res.status(200).json({
-        success: response.ok,
-        message: response.ok
-          ? "Simulated webhook request delivered"
-          : "Webhook endpoint returned an error",
-        webhookHttpStatus: response.status,
-        webhookResponse: responseText,
-        note: "This is a simulated request, not a genuine Razorpay webhook.",
+      // 5. Update gateway status
+      await prisma.tenantPaymentGateway.update({
+        where: { tenantId },
+        data: {
+          testPaymentOrderId: order.id,
+          testPaymentId: null,
+          testPaymentAt: null,
+          isVerified: false,
+          connectionStatus: "TEST_PAYMENT_PENDING",
+        },
+      });
+  
+      // 6. Send response
+      return res.status(201).json({
+        success: true,
+        message: "Test order created.",
+        data: {
+          keyId: gateway.keyId,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+        },
       });
     } catch (error) {
-      console.error("Test webhook error:", error.message);
+      console.error(
+        "Test order error:",
+        error.error?.description || error.message
+      );
   
       return res.status(500).json({
         success: false,
-        message: "Unable to send simulated webhook",
+        message: "Unable to create test order",
+        error: error.error?.description || error.message,
       });
     }
   };
-  
 
-// =====================================================
-// 3. GET CONNECTION STATUS
-// GET /api/v1/payment-gateway/status
-// =====================================================
+
+
+
+
 const getGatewayStatus = async (req, res) => {
   try {
     const gateway = await prisma.tenantPaymentGateway.findUnique({
@@ -1144,11 +1061,420 @@ const getGatewayStatus = async (req, res) => {
 // 4. SHARED RAZORPAY WEBHOOK
 // POST /api/v1/webhooks/razorpay
 // =====================================================
+// const tenantRazorpayWebhook = async (req, res) => {
+//   try {
+//     const rawBody = req.body;
+//     const signature = req.headers["x-razorpay-signature"];
+
+//     if (!Buffer.isBuffer(rawBody) || !signature) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid webhook request",
+//       });
+//     }
+
+//     // Shared endpoint: identify the tenant by verifying its secret.
+//     const gateways = await prisma.tenantPaymentGateway.findMany();
+
+//     let gateway = null;
+
+//     for (const item of gateways) {
+//       if (
+//         verifyWebhookSignature(
+//           rawBody,
+//           signature,
+//           item.webhookSecret
+//         )
+//       ) {
+//         gateway = item;
+//         break;
+//       }
+//     }
+
+//     if (!gateway) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid webhook signature",
+//       });
+//     }
+
+//     const body = JSON.parse(rawBody.toString("utf8"));
+//     const { event, payload } = body;
+//     const payment = payload?.payment?.entity;
+
+//     // A valid signed event proves this secret can authenticate
+//     // a webhook, but it does not prove the ₹1 payment succeeded.
+//     if (gateway.connectionStatus === "WEBHOOK_PENDING") {
+//       await prisma.tenantPaymentGateway.updateMany({
+//         where: {
+//           tenantId: gateway.tenantId,
+//           connectionStatus: "WEBHOOK_PENDING",
+//         },
+//         data: {
+//           connectionStatus: "WEBHOOK_VERIFIED",
+//           webhookVerifiedAt: new Date(),
+//         },
+//       });
+//     }
+
+//     if (!payment?.id || !payment?.order_id) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Webhook acknowledged",
+//       });
+//     }
+
+//     // ---------------------------------------------
+//     // A. FIRST-TIME ₹1 TEST PAYMENT
+//     // ---------------------------------------------
+//     if (payment.order_id === gateway.testPaymentOrderId) {
+//       if (
+//         event === "payment.captured" &&
+//         payment.amount === 100 &&
+//         payment.currency === "INR" &&
+//         payment.status === "captured"
+//       ) {
+//         await prisma.tenantPaymentGateway.updateMany({
+//           where: {
+//             tenantId: gateway.tenantId,
+//             testPaymentOrderId: payment.order_id,
+//             connectionStatus: "TEST_PAYMENT_PENDING",
+//           },
+//           data: {
+//             isVerified: true,
+//             connectionStatus: "CONNECTED",
+//             testPaymentId: payment.id,
+//             testPaymentAt: new Date(),
+//             lastVerifiedAt: new Date(),
+//           },
+//         });
+//       }
+
+//       return res.status(200).json({
+//         success: true,
+//         message: "Test payment event processed",
+//       });
+//     }
+
+//     // ---------------------------------------------
+//     // B. NORMAL CUSTOMER PAYMENT
+//     // ---------------------------------------------
+//     if (
+//       !["payment.captured", "payment.failed"].includes(event)
+//     ) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Event acknowledged",
+//       });
+//     }
+
+//     const customerPayment = await prisma.tenantPayment.findUnique({
+//       where: {
+//         razorpayOrderId: payment.order_id,
+//       },
+//     });
+
+//     if (!customerPayment || customerPayment.tenantId !== gateway.tenantId) {
+//       // Unknown orders must not update any payment.
+//       return res.status(200).json({
+//         success: true,
+//         message: "No matching customer payment",
+//       });
+//     }
+
+//     if (event === "payment.captured") {
+//       if (
+//         payment.status !== "captured" ||
+//         payment.amount !== customerPayment.amount ||
+//         payment.currency !== customerPayment.currency
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Payment details do not match the order",
+//         });
+//       }
+
+//       // Don't overwrite an existing captured payment.
+//       if (customerPayment.status !== "CAPTURED") {
+//         await prisma.tenantPayment.update({
+//           where: { paymentId: customerPayment.paymentId },
+//           data: {
+//             razorpayPaymentId: payment.id,
+//             status: "CAPTURED",
+//           },
+//         });
+//       }
+//     }
+
+//     if (
+//       event === "payment.failed" &&
+//       customerPayment.status !== "CAPTURED"
+//     ) {
+//       await prisma.tenantPayment.update({
+//         where: { paymentId: customerPayment.paymentId },
+//         data: {
+//           razorpayPaymentId: payment.id,
+//           status: "FAILED",
+//         },
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Customer payment webhook processed",
+//     });
+//   } catch (error) {
+//     console.error("Razorpay webhook error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Webhook processing failed",
+//     });
+//   }
+// };
+
+
+
+// const tenantRazorpayWebhook = async (req, res) => {
+//   try {
+//     // 1. Get tenant ID from URL
+//     const { tenantId } = req.params;
+
+//     // 2. Find tenant gateway
+//     const gateway = await prisma.tenantPaymentGateway.findUnique({
+//       where: { tenantId },
+//     });
+
+//     if (!gateway || !gateway.webhookSecret) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Tenant gateway not found",
+//       });
+//     }
+
+//     // 3. Verify webhook signature
+//     const signature = req.headers["x-razorpay-signature"];
+
+//     const expectedSignature = crypto
+//       .createHmac("sha256", gateway.webhookSecret)
+//       .update(req.body)
+//       .digest("hex");
+
+//     if (signature !== expectedSignature) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid signature",
+//       });
+//     }
+
+//     // 4. Convert Buffer to JSON
+//     const webhookData = JSON.parse(req.body.toString("utf8"));
+
+//     const { event, payload } = webhookData;
+//     const payment = payload.payment?.entity;
+
+//     console.log("Razorpay event:", event);
+
+//     // 5. Update webhook verification status
+//     if (gateway.connectionStatus === "WEBHOOK_PENDING") {
+//       await prisma.tenantPaymentGateway.update({
+//         where: { tenantId },
+//         data: {
+//           connectionStatus: "WEBHOOK_VERIFIED",
+//           webhookVerifiedAt: new Date(),
+//         },
+//       });
+//     }
+
+//     // 6. Handle only captured and failed events
+//     if (!["payment.captured", "payment.failed"].includes(event)) {
+//       return res.status(200).json({ success: true });
+//     }
+
+//     if (!payment?.id || !payment?.order_id) {
+//       return res.status(200).json({ success: true });
+//     }
+
+//     // 7. Handle ₹1 test payment
+//     if (payment.order_id === gateway.testPaymentOrderId) {
+//       if (
+//         event === "payment.captured" &&
+//         payment.status === "captured" &&
+//         payment.amount === 100 &&
+//         payment.currency === "INR"
+//       ) {
+//         await prisma.tenantPaymentGateway.updateMany({
+//           where: {
+//             tenantId,
+//             testPaymentOrderId: payment.order_id,
+//             connectionStatus: "TEST_PAYMENT_PENDING",
+//           },
+//           data: {
+//             isVerified: true,
+//             connectionStatus: "CONNECTED",
+//             testPaymentId: payment.id,
+//             testPaymentAt: new Date(),
+//             lastVerifiedAt: new Date(),
+//           },
+//         });
+
+//         console.log("₹1 test payment successful");
+//       } else if (event === "payment.failed") {
+//         console.log("₹1 test payment failed");
+//       }
+
+//       return res.status(200).json({
+//         success: true,
+//         message: "Test payment processed",
+//       });
+//     }
+
+//     // 8. Find customer payment by Razorpay order ID
+//     const customerPayment = await prisma.tenantPayment.findUnique({
+//       where: {
+//         razorpayOrderId: payment.order_id,
+//       },
+//     });
+
+//     if (!customerPayment || customerPayment.tenantId !== tenantId) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Payment record not found",
+//       });
+//     }
+
+//     // 9. Update successful payment
+//     if (event === "payment.captured") {
+//       if (
+//         payment.status !== "captured" ||
+//         payment.amount !== customerPayment.amount ||
+//         payment.currency !== customerPayment.currency
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Payment details do not match",
+//         });
+//       }
+
+//       if (customerPayment.status !== "CAPTURED") {
+//         await prisma.tenantPayment.update({
+//           where: {
+//             paymentId: customerPayment.paymentId,
+//           },
+//           data: {
+//             razorpayPaymentId: payment.id,
+//             status: "CAPTURED",
+//           },
+//         });
+//       }
+//     }
+
+//     // 10. Update failed payment
+//     if (
+//       event === "payment.failed" &&
+//       customerPayment.status !== "CAPTURED"
+//     ) {
+//       await prisma.tenantPayment.update({
+//         where: {
+//           paymentId: customerPayment.paymentId,
+//         },
+//         data: {
+//           razorpayPaymentId: payment.id,
+//           status: "FAILED",
+//         },
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Payment webhook processed",
+//     });
+//   } catch (error) {
+//     console.error("Razorpay Webhook Error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Webhook failed",
+//     });
+//   }
+// };
+
+
+
+
+
+const triggerDummyPaymentCaptured = async (req, res) => {
+  try {
+    //const { tenantId } = req.params;
+    const  tenantId  = "cmu10wts9000am51gie4iprm6"
+
+    const gateway = await prisma.tenantPaymentGateway.findUnique({
+      where: { tenantId },
+    });
+
+    if (!gateway?.webhookSecret) {
+      return res.status(400).json({
+        success: false,
+        message: "Webhook secret not configured",
+      });
+    }
+
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      payload: {
+        payment: {
+          entity: {
+            id: "pay_dummy_123",
+            order_id: "order_dummy_123",
+            amount: 100,
+            currency: "INR",
+            status: "captured",
+          },
+        },
+      },
+    });
+
+    const signature = crypto
+      .createHmac("sha256", gateway.webhookSecret)
+      .update(payload)
+      .digest("hex");
+
+    const response = await axios.post(
+      `https://cms-backend-9nkz.onrender.com/api/v1/webhooks/razorpay/${tenantId}`,
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-razorpay-signature": signature,
+        },
+        transformRequest: [(data) => data],
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Dummy event sent to webhook",
+      webhookResponse: response.data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to trigger webhook",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+
+
 const tenantRazorpayWebhook = async (req, res) => {
   try {
+    const { tenantId } = req.params;
+
     const rawBody = req.body;
     const signature = req.headers["x-razorpay-signature"];
 
+    // 1. Validate request
     if (!Buffer.isBuffer(rawBody) || !signature) {
       return res.status(400).json({
         success: false,
@@ -1156,70 +1482,64 @@ const tenantRazorpayWebhook = async (req, res) => {
       });
     }
 
-    // Shared endpoint: identify the tenant by verifying its secret.
-    const gateways = await prisma.tenantPaymentGateway.findMany();
+    // 2. Find tenant gateway
+    const gateway = await prisma.tenantPaymentGateway.findUnique({
+      where: { tenantId },
+    });
 
-    let gateway = null;
-
-    for (const item of gateways) {
-      if (
-        verifyWebhookSignature(
-          rawBody,
-          signature,
-          item.webhookSecret
-        )
-      ) {
-        gateway = item;
-        break;
-      }
+    if (!gateway || !gateway.webhookSecret) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant gateway not found",
+      });
     }
 
-    if (!gateway) {
+    // 3. Verify signature
+    const expectedSignature = crypto
+      .createHmac("sha256", gateway.webhookSecret)
+      .update(rawBody)
+      .digest("hex");
+
+    if (signature !== expectedSignature) {
       return res.status(400).json({
         success: false,
         message: "Invalid webhook signature",
       });
     }
 
-    const body = JSON.parse(rawBody.toString("utf8"));
-    const { event, payload } = body;
+    console.log("jaromjery na webhook ahh hit paniten")
+
+    // 4. Read webhook event
+    const { event, payload } = JSON.parse(
+      rawBody.toString("utf8")
+    );
+
     const payment = payload?.payment?.entity;
 
-    // A valid signed event proves this secret can authenticate
-    // a webhook, but it does not prove the ₹1 payment succeeded.
-    if (gateway.connectionStatus === "WEBHOOK_PENDING") {
-      await prisma.tenantPaymentGateway.updateMany({
-        where: {
-          tenantId: gateway.tenantId,
-          connectionStatus: "WEBHOOK_PENDING",
-        },
-        data: {
-          connectionStatus: "WEBHOOK_VERIFIED",
-          webhookVerifiedAt: new Date(),
-        },
-      });
+    console.log("Razorpay payments: ",payment)
+
+    console.log("Razorpay event:", event);
+
+    // 5. Process only captured and failed events
+    if (!["payment.captured", "payment.failed"].includes(event)) {
+      return res.status(200).json({ success: true });
     }
 
     if (!payment?.id || !payment?.order_id) {
-      return res.status(200).json({
-        success: true,
-        message: "Webhook acknowledged",
-      });
+      return res.status(200).json({ success: true });
     }
 
-    // ---------------------------------------------
-    // A. FIRST-TIME ₹1 TEST PAYMENT
-    // ---------------------------------------------
+    // 6. Handle ₹1 test payment separately
     if (payment.order_id === gateway.testPaymentOrderId) {
       if (
         event === "payment.captured" &&
+        payment.status === "captured" &&
         payment.amount === 100 &&
-        payment.currency === "INR" &&
-        payment.status === "captured"
+        payment.currency === "INR"
       ) {
         await prisma.tenantPaymentGateway.updateMany({
           where: {
-            tenantId: gateway.tenantId,
+            tenantId,
             testPaymentOrderId: payment.order_id,
             connectionStatus: "TEST_PAYMENT_PENDING",
           },
@@ -1235,36 +1555,27 @@ const tenantRazorpayWebhook = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: "Test payment event processed",
+        message: "Test payment processed",
       });
     }
 
-    // ---------------------------------------------
-    // B. NORMAL CUSTOMER PAYMENT
-    // ---------------------------------------------
-    if (
-      !["payment.captured", "payment.failed"].includes(event)
-    ) {
-      return res.status(200).json({
-        success: true,
-        message: "Event acknowledged",
-      });
-    }
-
+    // 7. Find the customer's payment record
     const customerPayment = await prisma.tenantPayment.findUnique({
       where: {
         razorpayOrderId: payment.order_id,
       },
     });
 
-    if (!customerPayment || customerPayment.tenantId !== gateway.tenantId) {
-      // Unknown orders must not update any payment.
+    if (!customerPayment || customerPayment.tenantId !== tenantId) {
+      console.log("Customer payment record not found");
+
       return res.status(200).json({
         success: true,
-        message: "No matching customer payment",
+        message: "Customer payment record not found",
       });
     }
 
+    // 8. Update successful payment
     if (event === "payment.captured") {
       if (
         payment.status !== "captured" ||
@@ -1273,38 +1584,43 @@ const tenantRazorpayWebhook = async (req, res) => {
       ) {
         return res.status(400).json({
           success: false,
-          message: "Payment details do not match the order",
+          message: "Payment details do not match",
         });
       }
 
-      // Don't overwrite an existing captured payment.
       if (customerPayment.status !== "CAPTURED") {
         await prisma.tenantPayment.update({
-          where: { paymentId: customerPayment.paymentId },
+          where: {
+            paymentId: customerPayment.paymentId,
+          },
           data: {
             razorpayPaymentId: payment.id,
             status: "CAPTURED",
           },
         });
       }
+
+      console.log("Customer payment captured:", payment.id);
     }
 
-    if (
-      event === "payment.failed" &&
-      customerPayment.status !== "CAPTURED"
-    ) {
+    // 9. Update failed payment
+    if (event === "payment.failed" && customerPayment.status !== "CAPTURED") {
       await prisma.tenantPayment.update({
-        where: { paymentId: customerPayment.paymentId },
+        where: {
+          paymentId: customerPayment.paymentId,
+        },
         data: {
           razorpayPaymentId: payment.id,
           status: "FAILED",
         },
       });
+
+      console.log("Customer payment failed:", payment.id);
     }
 
     return res.status(200).json({
       success: true,
-      message: "Customer payment webhook processed",
+      message: "Payment record updated",
     });
   } catch (error) {
     console.error("Razorpay webhook error:", error);
@@ -1316,10 +1632,16 @@ const tenantRazorpayWebhook = async (req, res) => {
   }
 };
 
+
+
+
+
+
 module.exports = {
   connectGateway,
   createTestOrder,
   getGatewayStatus,
   tenantRazorpayWebhook,
-  testWebhookConnection
+  triggerDummyPaymentCaptured
+ //testWebhookConnection  
 };

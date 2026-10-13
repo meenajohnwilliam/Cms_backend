@@ -74,25 +74,31 @@ const {
   connectGateway,
   createTestOrder,
   getGatewayStatus,
-  testWebhookConnection
+  triggerDummyPaymentCaptured
+
 } = require("../controllers/tenantPaymentGateway.controller");
 
 
 router.post("/config",
-  authMiddleware, roleMiddleware("ADMIN"),
+//   authMiddleware, roleMiddleware("ADMIN"),
   connectGateway
 );
 
-router.post("/webhook-test",testWebhookConnection)
+// router.post("/webhook-test",testWebhookConnection)
 
 router.post("/test-order",
-  authMiddleware, roleMiddleware("ADMIN"),
+//   authMiddleware, roleMiddleware("ADMIN"),
   createTestOrder
 );
 
 router.get("/status",
   authMiddleware, roleMiddleware("ADMIN"),
   getGatewayStatus
+);
+
+router.get("/test",
+//   authMiddleware, roleMiddleware("ADMIN"),
+triggerDummyPaymentCaptured
 );
 
 
