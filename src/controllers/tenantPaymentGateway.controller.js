@@ -1561,11 +1561,11 @@ const tenantRazorpayWebhook = async (req, res) => {
 
 
     if (
-        event !== "payment.captured" ||
-        payment?.id !== "pay_dummy_123" ||
-        payment?.order_id !== "order_dummy_123"
+        event === "payment.captured" ||
+        payment?.id === "pay_dummy_123" ||
+        payment?.order_id === "order_dummy_123"
       ) {
-        // 6. Record successful webhook verification
+          // 6. Record successful webhook verification
       await prisma.tenantPaymentGateway.update({
         where: { tenantId },
         data: {
@@ -1574,17 +1574,17 @@ const tenantRazorpayWebhook = async (req, res) => {
         },
       });
 
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
         webhookReceived: true,
         signatureVerified: true,
         event,
         message: "Dummy webhook verification successful",
       });
-    
       }
   
-     
+    
+    
 
 
     // 7. Find the customer's payment record
