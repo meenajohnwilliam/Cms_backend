@@ -96,7 +96,7 @@ router.get("/status",
   getGatewayStatus
 );
 
-router.get("/test",
+router.post("/test",
 //   authMiddleware, roleMiddleware("ADMIN"),
 triggerDummyPaymentCaptured
 );

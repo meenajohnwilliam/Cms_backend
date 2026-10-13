@@ -1530,34 +1530,62 @@ const tenantRazorpayWebhook = async (req, res) => {
     }
 
     // 6. Handle ₹1 test payment separately
-    if (payment.order_id === gateway.testPaymentOrderId) {
-      if (
-        event === "payment.captured" &&
-        payment.status === "captured" &&
-        payment.amount === 100 &&
-        payment.currency === "INR"
+    // if (payment.order_id === gateway.testPaymentOrderId) {
+    //   if (
+    //     event === "payment.captured" &&
+    //     payment.status === "captured" &&
+    //     payment.amount === 100 &&
+    //     payment.currency === "INR"
+    //   ) {
+    //     await prisma.tenantPaymentGateway.updateMany({
+    //       where: {
+    //         tenantId,
+    //         testPaymentOrderId: payment.order_id,
+    //         connectionStatus: "TEST_PAYMENT_PENDING",
+    //       },
+    //       data: {
+    //         isVerified: true,
+    //         connectionStatus: "CONNECTED",
+    //         testPaymentId: payment.id,
+    //         testPaymentAt: new Date(),
+    //         lastVerifiedAt: new Date(),
+    //       },
+    //     });
+    //   }
+
+    //   return res.status(200).json({
+    //     success: true,
+    //     message: "Test payment processed",
+    //   });
+    // }
+
+
+    if (
+        event !== "payment.captured" ||
+        payment?.id !== "pay_dummy_123" ||
+        payment?.order_id !== "order_dummy_123"
       ) {
-        await prisma.tenantPaymentGateway.updateMany({
-          where: {
-            tenantId,
-            testPaymentOrderId: payment.order_id,
-            connectionStatus: "TEST_PAYMENT_PENDING",
-          },
-          data: {
-            isVerified: true,
-            connectionStatus: "CONNECTED",
-            testPaymentId: payment.id,
-            testPaymentAt: new Date(),
-            lastVerifiedAt: new Date(),
-          },
-        });
-      }
+        // 6. Record successful webhook verification
+      await prisma.tenantPaymentGateway.update({
+        where: { tenantId },
+        data: {
+          webhookVerifiedAt: new Date(),
+          lastVerifiedAt: new Date(),
+        },
+      });
 
       return res.status(200).json({
         success: true,
-        message: "Test payment processed",
+        webhookReceived: true,
+        signatureVerified: true,
+        event,
+        message: "Dummy webhook verification successful",
       });
-    }
+    
+      }
+  
+     
+
 
     // 7. Find the customer's payment record
     const customerPayment = await prisma.tenantPayment.findUnique({
