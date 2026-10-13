@@ -43,7 +43,7 @@ app.post("/api/v1/subscriptions/razorpay/webhook",
   );
 
   // Public webhook: MUST use the raw body.
-app.post("/api/v1/webhooks/razorpay",
+app.post("/api/v1/webhooks/razorpay/:tenantId",
   express.raw({ 
     type: "application/json" 
   }),
