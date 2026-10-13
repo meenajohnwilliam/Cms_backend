@@ -1419,20 +1419,32 @@ const triggerDummyPaymentCaptured = async (req, res) => {
       });
     }
 
-    const payload = JSON.stringify({
-      event: "payment.captured",
-      payload: {
-        payment: {
-          entity: {
-            id: "pay_dummy_123",
-            order_id: "order_dummy_123",
-            amount: 100,
-            currency: "INR",
-            status: "captured",
+    const dummyPayment = {
+        id: "pay_dummy_123",
+        order_id: "order_dummy_123",
+        amount: 100,
+        currency: "INR",
+        status: "captured",
+      };
+      
+      const payload = JSON.stringify({
+        event: "payment.captured",
+        payload: {
+          payment: {
+            entity: dummyPayment,
           },
         },
-      },
-    });
+      });
+      
+      await prisma.tenantPaymentGateway.update({
+        where: { tenantId },
+        data: {
+          testPaymentOrderId: dummyPayment.order_id,
+          testPaymentId: dummyPayment.id,
+        },
+      });
+
+
 
     const signature = crypto
       .createHmac("sha256", gateway.webhookSecret)
@@ -1486,6 +1498,8 @@ const tenantRazorpayWebhook = async (req, res) => {
     const gateway = await prisma.tenantPaymentGateway.findUnique({
       where: { tenantId },
     });
+
+    console.log(gateway)
 
     if (!gateway || !gateway.webhookSecret) {
       return res.status(404).json({
@@ -1562,8 +1576,8 @@ const tenantRazorpayWebhook = async (req, res) => {
 
     if (
         event === "payment.captured" ||
-        payment?.id === "pay_dummy_123" ||
-        payment?.order_id === "order_dummy_123"
+        payment?.id === gateway.testPaymentOrderId ||
+        payment?.order_id === testPaymentId
       ) {
           // 6. Record successful webhook verification
       await prisma.tenantPaymentGateway.update({
