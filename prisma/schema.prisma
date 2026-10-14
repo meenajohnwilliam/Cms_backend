@@ -87,7 +87,7 @@ enum GatewayConnectionStatus {
   DISCONNECTED
   CREDENTIALS_VERIFIED
   WEBHOOK_PENDING
-  WEBHOOK_VERIFIED
+  WEBHOOK_VERIFIED 
   TEST_PAYMENT_PENDING
   CONNECTED
   ERROR
@@ -107,12 +107,14 @@ model TenantPaymentGateway {
   provider           String   @default("RAZORPAY")
   keyId              String
   keySecret          String
+  webhookUrl         String?
   webhookSecret      String   
   websiteUrl         String?
   isVerified         Boolean  @default(false)
   connectionStatus   GatewayConnectionStatus @default(DISCONNECTED)
 
   testPaymentOrderId String?  @unique
+  webhookVerificationOrderId String?
   testPaymentId      String?
   testPaymentAt      DateTime?
   webhookVerifiedAt  DateTime?

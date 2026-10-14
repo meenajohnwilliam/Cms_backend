@@ -6,6 +6,7 @@ const config = {
   port: process.env.PORT,
   nodeEnv: process.env.NODE_ENV,
   jwtSecret: process.env.JWT_SECRET,
+  buildFreeWebhookUrl: process.env.BUILD_FREE_WEBHOOKURL,
   resend: {
     apiKey: process.env.RESEND_API_KEY,
     fromEmail: process.env.RESEND_FROM_EMAIL,
