@@ -9,8 +9,8 @@ const config = require("../config/config")
 
 const connectGateway = async (req, res) => {
   try {
-    const tenantId = "cmu10wts9000am51gie4iprm6";
-
+    // const tenantId = "cmu10wts9000am51gie4iprm6";
+    const tenantId = req.user.tenantId;
     const {
       provider,
       keyId,
@@ -93,7 +93,8 @@ const connectGateway = async (req, res) => {
 const createTestOrder = async (req, res) => {
     try {
       // 1. Get tenant ID
-      const tenantId = req.user?.tenantId || "cmu10wts9000am51gie4iprm6";
+    //   const tenantId = req.user?.tenantId || "cmu10wts9000am51gie4iprm6";
+    const tenantId = req.user.tenantId;
   
       // 2. Find tenant Razorpay configuration
       const gateway = await prisma.tenantPaymentGateway.findUnique({
@@ -191,7 +192,8 @@ const getGatewayStatus = async (req, res) => {
 const testWebhookConnection = async (req, res) => {
   try {
     //const { tenantId } = req.params;
-    const  tenantId  = "cmu10wts9000am51gie4iprm6"
+    // const  tenantId  = "cmu10wts9000am51gie4iprm6"
+    const tenantId = req.user.tenantId;
 
     const gateway = await prisma.tenantPaymentGateway.findUnique({
       where: { tenantId },

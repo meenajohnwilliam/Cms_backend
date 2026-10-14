@@ -15,17 +15,17 @@ const {
 
 
 router.post("/config",
-//   authMiddleware, roleMiddleware("ADMIN"),
+  authMiddleware, roleMiddleware("ADMIN"),
   connectGateway
 );
 
 router.post("/test",
-    //   authMiddleware, roleMiddleware("ADMIN"),
+      authMiddleware, roleMiddleware("ADMIN"),
     testWebhookConnection
     );
 
 router.post("/test-order",
-//   authMiddleware, roleMiddleware("ADMIN"),
+  authMiddleware, roleMiddleware("ADMIN"),
   createTestOrder
 );
 
