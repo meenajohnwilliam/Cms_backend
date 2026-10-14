@@ -250,8 +250,7 @@ const testWebhookConnection = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Event sent to webhook",
-      webhookResponse: response.data,
+      message: "Test sent to webhook",
     });
   } catch (error) {
     return res.status(500).json({
@@ -518,6 +517,7 @@ const tenantRazorpayWebhook = async (req, res) => {
       const payment = payload?.payment?.entity;
   
       console.log("Razorpay event:", event);
+      console.log("jery",payment)
   
       if (!["payment.captured", "payment.failed"].includes(event)) {
         return res.status(200).json({
@@ -544,7 +544,7 @@ const tenantRazorpayWebhook = async (req, res) => {
             lastVerifiedAt: new Date(),
           },
         });
-  
+  console.log("done")
         return res.status(200).json({
           success: true,
           signatureVerified: true,
