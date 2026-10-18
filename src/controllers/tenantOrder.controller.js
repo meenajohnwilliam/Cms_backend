@@ -132,6 +132,7 @@ const createOrder = async (req, res) => {
       const order = await prisma.tenantOrder.create({
         data: {
           tenantId,
+          projectId,
           customerRecordId: record.recordId,
           customerSnapshot: record.data,
           amount,
@@ -252,12 +253,14 @@ const createOrder = async (req, res) => {
         });
       }
   
-      // 4. Get tenant ID from the validated API key
-      const tenantId = apiKey.project.tenantId;
-  
       // 5. Fetch only this tenant's orders
+      const { projectId, tenantId } = apiKey.project;
+
       const orders = await prisma.tenantOrder.findMany({
-        where: { tenantId },
+        where: {
+          tenantId,
+          projectId,
+        },
         include: {
           customerRecord: {
             select: {
@@ -281,14 +284,15 @@ const createOrder = async (req, res) => {
         orderBy: {
           createdAt: "desc",
         },
-        take: 50,
       });
-  
+      
       return res.status(200).json({
         success: true,
         total: orders.length,
         data: orders,
       });
+  
+      
     } catch (error) {
       console.error("Get tenant orders error:", error);
   
