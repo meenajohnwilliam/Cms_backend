@@ -4,7 +4,7 @@ const router = express.Router();
 const {
   createOrder,
   getTenantOrders,
-} = require("../controllers/tenantPaymentGateway.controller");
+} = require("../controllers/tenantOrder.controller");
 
 // Create a payment order
 router.post("/", createOrder);

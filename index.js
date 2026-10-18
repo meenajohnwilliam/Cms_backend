@@ -21,7 +21,7 @@ const usageRoutes = require("./src/routes/usage.routes")
 const tenantRoutes = require("./src/routes/tenant.routes")
 const tenantPaymentGatewayRoutes = require("./src/routes/tenantPaymentGateway.routes");
 const {tenantRazorpayWebhook} = require("./src/controllers/tenantPaymentGateway.controller")
-const tenantOrder = require("./src/routes/tenantOrder.routes")
+const tenantOrderRoutes = require("./src/routes/tenantOrder.routes")
 
 
 
@@ -78,7 +78,7 @@ app.use("/api/v1/tenant",tenantRoutes);
 app.use("/api/v1/usage", usageRoutes);
 app.use("/api/v1/forms/submissions",formSubmissionRoutes);
 app.use("/api/v1/tenant/payment-gateway", tenantPaymentGatewayRoutes);
-app.use("/api/v1/order", tenantOrder);
+app.use("/api/v1/order", tenantOrderRoutes);
 
 
 
