@@ -79,6 +79,8 @@ model Tenant {
   projects        Project[]
   usage           Usage?
   paymentGateway TenantPaymentGateway?
+  tenantOrders           TenantOrder[]
+  tenantCustomerPayments TenantPayment[]
 
 }
 
@@ -97,6 +99,12 @@ enum CustomerPaymentStatus {
   PENDING
   CAPTURED
   FAILED
+}
+
+enum TenantOrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
 }
 
 model TenantPaymentGateway {
@@ -126,9 +134,39 @@ model TenantPaymentGateway {
   @@index([connectionStatus])
 }
 
+
+model TenantOrder {
+  orderId           String   @id @default(cuid())
+
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
+
+  customerRecordId  String?
+  customerRecord    Record?  @relation(fields: [customerRecordId], references: [recordId], onDelete: SetNull)
+
+  customerSnapshot  Json?
+
+  amount            Int
+  currency          String   @default("INR")
+  status            TenantOrderStatus @default(PENDING)
+
+  payments          TenantPayment[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([customerRecordId])
+}
+
 model TenantPayment {
   paymentId          String   @id @default(cuid())
+  
   tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
+
+  orderId            String?
+  order              TenantOrder? @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
 
   razorpayOrderId    String   @unique
   razorpayPaymentId  String?  @unique
@@ -136,6 +174,7 @@ model TenantPayment {
   amount             Int
   currency           String   @default("INR")
   status             CustomerPaymentStatus @default(PENDING)
+  paidAt             DateTime?
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -400,6 +439,8 @@ model Record {
   media           Media[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+
+  orders TenantOrder[]
 
   @@index([collectionId])
 }
