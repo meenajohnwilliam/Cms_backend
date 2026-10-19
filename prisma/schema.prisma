@@ -122,11 +122,10 @@ model TenantPaymentGateway {
   connectionStatus   GatewayConnectionStatus @default(DISCONNECTED)
 
   testPaymentOrderId String?  @unique
-  webhookVerificationOrderId String?
-  testPaymentId      String?
+  testPaymentId      String?  @unique
   testPaymentAt      DateTime?
   webhookVerifiedAt  DateTime?
-  lastVerifiedAt     DateTime?
+  lastTestPaymentVerifiedAt     DateTime?
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

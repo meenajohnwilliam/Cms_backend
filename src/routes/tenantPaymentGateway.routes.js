@@ -21,7 +21,7 @@ router.post("/config",
 );
 
 router.post("/test",
-      authMiddleware, roleMiddleware("ADMIN"),
+    //   authMiddleware, roleMiddleware("ADMIN"),
     testWebhookConnection
     );
 
