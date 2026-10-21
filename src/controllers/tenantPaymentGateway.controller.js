@@ -104,7 +104,10 @@ const getGatewayStatus = async (req, res) => {
           testPaymentAt: true,
           webhookVerifiedAt: true,
           webhookUrl: true,
-          lastVerifiedAt: true,
+          lastTestPaymentVerifiedAt: true,
+          keyId:true,
+          websiteUrl:true
+
         },
       });
   
