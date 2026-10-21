@@ -320,6 +320,9 @@ const tenantRazorpayWebhook = async (req, res) => {
   // Get tenantId from Razorpay notes
   const tenantId =payment?.notes?.tenantId || payload?.order?.entity?.notes?.tenantId;
 
+  console.log("tenantIdFromPayment:",payment?.notes?.tenantId)
+  console.log("tenantIdFromPayload:",payload?.order?.entity?.notes?.tenantId)
+
 if (!tenantId) {
   return res.status(400).json({
     success: false,
@@ -397,7 +400,7 @@ if (!tenantId) {
               connectionStatus: "CONNECTED",
               testPaymentId: payment.id,
               testPaymentAt: new Date(),
-              lastVerifiedAt: new Date(),
+              lastTestPaymentVerifiedAt: new Date(),
             },
           });
   
