@@ -10,7 +10,7 @@ const prisma = require("../config/prisma");
 const createOrder = async (req, res) => {
     try {
 
-        const rawApiKey = req.headers["x-api-key"];
+    const rawApiKey = req.headers["x-api-key"];
 
       if (typeof rawApiKey !== "string" || !rawApiKey.trim()) {
       return res.status(401).json({
