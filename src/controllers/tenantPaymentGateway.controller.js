@@ -70,11 +70,13 @@ const connectGateway = async (req, res) => {
         testPaymentId: null,
         testPaymentAt: null,
         webhookVerifiedAt: null,
-        lastVerifiedAt: null,
+        lastTestPaymentVerifiedAt: null,
         isVerified: false,
         connectionStatus: "WEBHOOK_PENDING",
       },
     });
+
+    
 
     return res.status(200).json({
       success: true,
