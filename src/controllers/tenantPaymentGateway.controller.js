@@ -78,8 +78,8 @@ const connectGateway = async (req, res) => {
         where: {
           keyId: keyId.trim(),
           webhookVerifiedAt: { not: null },
-          testPaymentId: { not: null },
-          isVerified:true
+        //   testPaymentId: { not: null },
+        //   isVerified:true
         },
         select: { webhookSecret: true },
       });
