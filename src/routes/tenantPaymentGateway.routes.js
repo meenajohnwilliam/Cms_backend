@@ -15,7 +15,7 @@ const {
 } = require("../controllers/tenantPaymentGateway.controller");
 
 
-router.post("/:projectId/config",
+router.post("/projects/:projectId/config",
   authMiddleware, roleMiddleware("ADMIN"),
   connectGateway
 );
