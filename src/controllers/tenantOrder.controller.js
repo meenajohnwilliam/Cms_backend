@@ -6,9 +6,7 @@ const prisma = require("../config/prisma");
 
 
 
-const crypto = require("crypto");
-const Razorpay = require("razorpay");
-const prisma = require("../lib/prisma");
+
 
 const createOrder = async (req, res) => {
   try {
