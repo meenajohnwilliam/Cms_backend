@@ -74,8 +74,16 @@ const connectGateway = async (req, res) => {
 
     await razorpay.orders.all({ count: 1 });
 
+    const sameAccountGateway = await prisma.projectPaymentGateway.findFirst({
+        where: {
+          keyId: keyId.trim(),
+          webhookVerifiedAt: { not: null },
+        },
+        select: { webhookSecret: true },
+      });
+
     // Generate a unique webhook secret for this tenant.
-    const webhookSecret = crypto.randomBytes(32).toString("hex");
+    const webhookSecret = sameAccountGateway?.webhookSecret || crypto.randomBytes(32).toString("hex");
 
     const webhookUrl =`${config.buildFreeWebhookUrl}`;
 
@@ -109,6 +117,18 @@ const connectGateway = async (req, res) => {
         connectionStatus: "WEBHOOK_PENDING",
       },
     });
+
+
+    if (sameAccountGateway) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            webhookAlreadyConfigured: true,
+          },
+          message:
+            "Credentials verified. Webhook already configured. Click ‘Test Connection’ to proceed directly.",
+        });
+      }
 
     
 
