@@ -123,6 +123,8 @@ const connectGateway = async (req, res) => {
         return res.status(200).json({
           success: true,
           data: {
+            webhookUrl,
+            webhookSecret,
             webhookAlreadyConfigured: true,
           },
           message:
