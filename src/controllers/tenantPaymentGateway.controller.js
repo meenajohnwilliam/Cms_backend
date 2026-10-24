@@ -78,6 +78,8 @@ const connectGateway = async (req, res) => {
         where: {
           keyId: keyId.trim(),
           webhookVerifiedAt: { not: null },
+          testPaymentId: { not: null },
+          isVerified:true
         },
         select: { webhookSecret: true },
       });
@@ -139,6 +141,7 @@ const connectGateway = async (req, res) => {
       data:{
         webhookSecret,
         webhookUrl,
+        webhookAlreadyConfigured: false,
       },
       message: "Credentials validated. Configure your Razorpay webhook.",
     });
