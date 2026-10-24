@@ -11,6 +11,7 @@ const connectGateway = async (req, res) => {
   try {
     // const tenantId = "cmu10wts9000am51gie4iprm6";
     const tenantId = req.user.tenantId;
+    const { projectId } = req.params;
     const {
       provider,
       keyId,
@@ -24,6 +25,13 @@ const connectGateway = async (req, res) => {
         message: "Tenant not found",
       });
     }
+
+    if (!projectId) {
+        return res.status(400).json({
+          success: false,
+          message: "Project ID is required",
+        });
+      }
     
     if (!provider || !keyId || !keySecret || !websiteUrl) {
       return res.status(400).json({
@@ -31,6 +39,32 @@ const connectGateway = async (req, res) => {
         message: "All fields are required",
       });
     }
+
+    if (provider.toUpperCase() !== "RAZORPAY") {
+        return res.status(400).json({
+          success: false,
+          message: "Unsupported payment provider",
+        });
+      }
+
+        // Verify project ownership directly.
+        const project = await prisma.project.findFirst({
+            where: {
+              projectId,
+              tenantId,
+            },
+            select: {
+              projectId: true,
+              tenantId: true,
+            },
+          });
+      
+          if (!project) {
+            return res.status(404).json({
+              success: false,
+              message: "Project not found",
+            });
+          }  
 
     // Validate credentials before saving.
     const razorpay = new Razorpay({
@@ -45,11 +79,11 @@ const connectGateway = async (req, res) => {
 
     const webhookUrl =`${config.buildFreeWebhookUrl}`;
 
-    await prisma.tenantPaymentGateway.upsert({
-      where: { tenantId },
+    await prisma.projectPaymentGateway.upsert({
+      where: { projectId  },
 
       create: {
-        tenantId,
+        projectId:projectId,
         provider: provider ,
         keyId: keyId.trim(),
         keySecret: keySecret.trim(),
@@ -84,7 +118,7 @@ const connectGateway = async (req, res) => {
         webhookSecret,
         webhookUrl,
       },
-      message: "Successfully Credentials validated.",
+      message: "Credentials validated. Configure your Razorpay webhook.",
     });
   } catch (error) {
     console.error("Connect gateway error:", error.message);
@@ -98,9 +132,35 @@ const connectGateway = async (req, res) => {
 
 const getGatewayStatus = async (req, res) => {
     try {
-      const gateway = await prisma.tenantPaymentGateway.findUnique({
-        where: { tenantId: req.user.tenantId },
+      const tenantId = req.user?.tenantId;
+      const { projectId } = req.params;  
+
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: "Tenant not found",
+        });
+      }
+
+      const project = await prisma.project.findFirst({
+        where: {
+          projectId,
+          tenantId,
+        },
+        select: { projectId: true },
+      });
+  
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
+
+      const gateway = await prisma.projectPaymentGateway.findUnique({
+        where: { projectId: projectId },
         select: {
+          provider: true,
           isVerified: true,
           connectionStatus: true,
           testPaymentAt: true,
@@ -112,8 +172,17 @@ const getGatewayStatus = async (req, res) => {
 
         },
       });
+
+      if (!gateway) {
+        return res.status(200).json({
+          success: true,
+          configured: false,
+          data: null,
+          message: "No gateway configured for this project",
+        });
+      }
   
-      return res.json({
+      return res.status(200).json({
         success: true,
         data: {
           ...gateway,
@@ -150,10 +219,33 @@ const getGatewayStatus = async (req, res) => {
 const testWebhookConnection = async (req, res) => {
     try {
       const tenantId = req.user.tenantId;
+      const { projectId } = req.params;
     //   const tenantId = "cmu10wts9000am51gie4iprm6";
+
+    if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: "Tenant not found",
+        });
+      }
+
+      const project = await prisma.project.findFirst({
+        where: {
+          projectId,
+          tenantId,
+        },
+        select: { projectId: true },
+      });
   
-      const gateway = await prisma.tenantPaymentGateway.findUnique({
-        where: { tenantId },
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
+  
+      const gateway = await prisma.projectPaymentGateway.findUnique({
+        where: { projectId  },
       });
   
       if (!gateway?.keyId || !gateway?.keySecret) {
@@ -190,8 +282,8 @@ const testWebhookConnection = async (req, res) => {
         });
       }
   
-      await prisma.tenantPaymentGateway.update({
-        where: { tenantId },
+      await prisma.projectPaymentGateway.update({
+        where: { projectId },
         data: {
           connectionStatus: "WEBHOOK_VERIFIED",
           webhookVerifiedAt: new Date(),
@@ -223,10 +315,33 @@ const createTestOrder = async (req, res) => {
       // 1. Get tenant ID
     //   const tenantId = req.user?.tenantId || "cmu10wts9000am51gie4iprm6";
     const tenantId = req.user.tenantId;
+    const { projectId } = req.params;
+
+    if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: "Tenant not found",
+        });
+      }
+
+      const project = await prisma.project.findFirst({
+        where: {
+          projectId,
+          tenantId,
+        },
+        select: { projectId: true },
+      });
+  
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
   
       // 2. Find tenant Razorpay configuration
-      const gateway = await prisma.tenantPaymentGateway.findUnique({
-        where: { tenantId },
+      const gateway = await prisma.projectPaymentGateway.findUnique({
+        where: { projectId  },
       });
   
       if (!gateway) {
@@ -248,13 +363,14 @@ const createTestOrder = async (req, res) => {
         currency: "INR",
         notes: {
           tenantId,
+          projectId,
           purpose: "gateway_connection_test",
         },
       });
   
       // 5. Update gateway status
-      await prisma.tenantPaymentGateway.update({
-        where: { tenantId },
+      await prisma.projectPaymentGateway.update({
+        where: { projectId  },
         data: {
           testPaymentOrderId: order.id,
           testPaymentId: null,
@@ -319,22 +435,21 @@ const tenantRazorpayWebhook = async (req, res) => {
 
   // Get tenantId from Razorpay notes
   const tenantId =payment?.notes?.tenantId || payload?.order?.entity?.notes?.tenantId;
+  const projectId =payment?.notes?.projectId || payload?.order?.entity?.notes?.projectId;
 
   console.log("tenantIdFromPayment:",payment?.notes?.tenantId)
   console.log("tenantIdFromPayload:",payload?.order?.entity?.notes?.tenantId)
 
-if (!tenantId) {
-  return res.status(400).json({
-    success: false,
-    message: "Tenant ID not found in Razorpay notes",
-  });
-}
-
-
+  if (!tenantId || !projectId) {
+    return res.status(200).json({
+      success: true,
+      message: "Not a BuildFree payment, ignored",
+    });
+  }
 
            // 2. Find gateway
-           const gateway = await prisma.tenantPaymentGateway.findUnique({
-            where: { tenantId },
+           const gateway = await prisma.projectPaymentGateway.findUnique({
+            where: { projectId },
           });
       
           if (!gateway) {
@@ -394,8 +509,8 @@ if (!tenantId) {
           payment.amount === 100 &&
           payment.currency === "INR"
         ) {
-          await prisma.tenantPaymentGateway.update({
-            where: { tenantId },
+          await prisma.projectPaymentGateway.update({
+            where: { projectId  },
             data: {
               connectionStatus: "CONNECTED",
               testPaymentId: payment.id,
@@ -420,7 +535,7 @@ if (!tenantId) {
       }
   
       // 7. Find customer payment
-      const customerPayment = await prisma.tenantPayment.findFirst({
+      const customerPayment = await prisma.customerPayment.findFirst({
         where: {
           razorpayOrderId: payment.order_id,
           tenantId,
@@ -437,7 +552,7 @@ if (!tenantId) {
      // 8. Customer payment captured
      if (event === "payment.captured" && payment.status === "captured") {
     if (customerPayment.status !== "CAPTURED") {
-      await prisma.tenantPayment.update({
+      await prisma.customerPayment.update({
         where: { paymentId: customerPayment.paymentId },
         data: {
           razorpayPaymentId: payment.id,
@@ -448,7 +563,7 @@ if (!tenantId) {
     }
   
     if (customerPayment.orderId) {
-      await prisma.tenantOrder.update({
+      await prisma.customerOrder.update({
         where: { orderId: customerPayment.orderId },
         data: { status: "CONFIRMED" },
       });
@@ -469,7 +584,7 @@ if (!tenantId) {
           });
         }
   
-        await prisma.tenantPayment.update({
+        await prisma.customerPayment.update({
             where: { paymentId: customerPayment.paymentId },
             data: {
               status: "FAILED",

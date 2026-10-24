@@ -15,26 +15,25 @@ const {
 } = require("../controllers/tenantPaymentGateway.controller");
 
 
-router.post("/config",
+router.post("/:projectId/config",
   authMiddleware, roleMiddleware("ADMIN"),
   connectGateway
 );
 
-router.post("/test",
+router.post("/projects/:projectId/test",
       authMiddleware, roleMiddleware("ADMIN"),
     testWebhookConnection
     );
 
-router.post("/test-order",
+router.post("/projects/:projectId/test-order",
   authMiddleware, roleMiddleware("ADMIN"),
   createTestOrder
 );
 
-router.get("/status",
+router.get("/projects/:projectId/status",
   authMiddleware, roleMiddleware("ADMIN"),
   getGatewayStatus
 );
-
 
 
 

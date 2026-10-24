@@ -78,9 +78,8 @@ model Tenant {
   payments        Payment[]
   projects        Project[]
   usage           Usage?
-  paymentGateway TenantPaymentGateway?
-  tenantOrders           TenantOrder[]
-  tenantCustomerPayments TenantPayment[]
+  customerOrders           CustomerOrder[]
+  CustomerPayments  CustomerPayment[]
 
 }
 
@@ -101,16 +100,17 @@ enum CustomerPaymentStatus {
   FAILED
 }
 
-enum TenantOrderStatus {
+enum CustomerOrderStatus {
   PENDING
   CONFIRMED
   CANCELLED
 }
 
-model TenantPaymentGateway {
+model ProjectPaymentGateway {
   gatewayId          String   @id @default(cuid())
-  tenantId           String   @unique
-  tenant             Tenant   @relation(fields: [tenantId], references: [tenantId],onDelete: Cascade)
+  
+  projectId  String  @unique
+  project    Project @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
 
   provider           String   @default("RAZORPAY")
   keyId              String
@@ -134,38 +134,41 @@ model TenantPaymentGateway {
 }
 
 
-model TenantOrder {
+model CustomerOrder {
   orderId           String   @id @default(cuid())
 
   tenantId          String
   tenant            Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
 
-  customerRecordId  String?
-  customerRecord    Record?  @relation(fields: [customerRecordId], references: [recordId], onDelete: SetNull)
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
 
   customerSnapshot  Json?
 
   amount            Int
   currency          String   @default("INR")
-  status            TenantOrderStatus @default(PENDING)
+  status            CustomerOrderStatus @default(PENDING)
 
-  payments          TenantPayment[]
+  payments          CustomerPayment[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   @@index([tenantId, status])
-  @@index([customerRecordId])
+
 }
 
-model TenantPayment {
+model CustomerPayment {
   paymentId          String   @id @default(cuid())
   
   tenantId           String
   tenant             Tenant   @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict)
 
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
+
   orderId            String?
-  order              TenantOrder? @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
+  order              CustomerOrder? @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
 
   razorpayOrderId    String   @unique
   razorpayPaymentId  String?  @unique
@@ -179,17 +182,7 @@ model TenantPayment {
   updatedAt          DateTime @updatedAt
 
   @@index([tenantId, status])
-}
-
-model RazorpayWebhookEvent {
-  id                 String   @id @default(cuid())
-  eventId            String   @unique
-  tenantId           String
-  event              String
-  processed          Boolean  @default(false)
-  createdAt          DateTime @default(now())
-
-  @@index([tenantId, createdAt])
+  @@index([projectId, status]) 
 }
 
 
@@ -382,6 +375,10 @@ model Project {
   userAccess      UserProjectAccess[]
   form            Form[]
 
+  projectPaymentGateway  ProjectPaymentGateway?
+  customerOrders   CustomerOrder[]
+  customerPayments CustomerPayment[]
+
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -438,8 +435,6 @@ model Record {
   media           Media[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-
-  orders TenantOrder[]
 
   @@index([collectionId])
 }
