@@ -156,7 +156,6 @@ const getGatewayStatus = async (req, res) => {
           message: "Project not found",
         });
       }
-
       const gateway = await prisma.projectPaymentGateway.findUnique({
         where: { projectId: projectId },
         select: {
