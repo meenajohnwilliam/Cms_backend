@@ -160,7 +160,7 @@ const createOrder = async (req, res) => {
 
 const getOrders = async (req, res) => {
     try {
-      const { projectId } = req.query;
+        const { projectId } = req.params;
   
       if (!projectId) {
         return res.status(400).json({
