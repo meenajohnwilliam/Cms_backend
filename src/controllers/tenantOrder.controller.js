@@ -158,6 +158,68 @@ const createOrder = async (req, res) => {
 };
 
 
+const getOrders = async (req, res) => {
+    try {
+      const { projectId } = req.query;
+  
+      if (!projectId) {
+        return res.status(400).json({
+          success: false,
+          message: "projectId is required",
+        });
+      }
+  
+      const page = Math.max(
+        1,
+        parseInt(req.query.page, 10) || 1
+      );
+  
+      const limit = Math.min(
+        100,
+        Math.max(1, parseInt(req.query.limit, 10) || 10)
+      );
+  
+      const skip = (page - 1) * limit;
+  
+      const [orders, totalOrders] = await Promise.all([
+        prisma.customerOrder.findMany({
+          where: { projectId },
+          include: {
+            payments: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          skip,
+          take: limit,
+        }),
+  
+        prisma.customerOrder.count({
+          where: { projectId },
+        }),
+      ]);
+  
+      return res.status(200).json({
+        success: true,
+        message: "Orders fetched successfully",
+        pagination: {
+          totalOrders,
+          currentPage: page,
+          limit,
+          totalPages: Math.ceil(totalOrders / limit),
+        },
+        data: orders,
+      });
+    } catch (error) {
+      console.error("Get orders error:", error);
+  
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch orders",
+      });
+    }
+  };
+  
 
 
 // const createOrder = async (req, res) => {
@@ -712,5 +774,5 @@ const getTenantOrders = async (req, res) => {
 //   };
   
   module.exports = {
-    createOrder,getTenantOrders
+    createOrder,getTenantOrders,getOrders
   };
