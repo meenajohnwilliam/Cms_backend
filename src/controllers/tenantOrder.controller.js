@@ -115,7 +115,7 @@ const createOrder = async (req, res) => {
       data: {
         tenantId,
         projectId,
-        amount,
+        amount:amount/100,
         currency: "INR",
         status: "PENDING",
         customerSnapshot: {
@@ -128,7 +128,7 @@ const createOrder = async (req, res) => {
             tenantId,
             projectId,
             razorpayOrderId: razorpayOrder.id,
-            amount,
+            amount:amount/100,
             currency: "INR",
             status: "PENDING",
           },
