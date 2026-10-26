@@ -32,7 +32,7 @@ router.post(
   "/users",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   createClientUser
 );
 
@@ -40,7 +40,7 @@ router.get(
   "/users",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   getClientUsers
 );
 
@@ -48,7 +48,7 @@ router.get(
   "/users/:userId",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   getClientUser
 );
 
@@ -56,7 +56,7 @@ router.put(
   "/users/:userId",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   updateClientUser
 );
 
@@ -64,7 +64,7 @@ router.delete(
   "/users/:userId",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   deleteClientUser
 );
 
@@ -76,7 +76,7 @@ router.post(
   "/users/:userId/projects/:projectId",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   assignProjectToUser
 );
 
@@ -84,7 +84,7 @@ router.delete(
   "/users/:userId/projects/:projectId",
   authMiddleware,
   roleMiddleware("ADMIN"),
-  clientRecordAccess,
+  // clientRecordAccess,
   removeProjectAccess
 );
 
