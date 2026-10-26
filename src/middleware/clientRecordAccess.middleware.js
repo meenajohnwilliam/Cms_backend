@@ -154,8 +154,7 @@ const clientRecordAccess = async (req, res, next) => {
     // ========================================================
 
     if (req.params.projectId) {
-      const project =
-        await prisma.project.findFirst({
+      const project = await prisma.project.findFirst({
           where: {
             projectId: req.params.projectId,
             tenantId,
