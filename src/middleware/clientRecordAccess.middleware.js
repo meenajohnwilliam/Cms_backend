@@ -25,129 +25,129 @@ const clientRecordAccess = async (req, res, next) => {
       });
     }
 
-    // // ========================================================
-    // // COLLECTION REQUEST
-    // // ========================================================
+    // ========================================================
+    // COLLECTION REQUEST
+    // ========================================================
 
-    // if (req.params.collectionId) {
-    //   const collection =
-    //     await prisma.collection.findFirst({
-    //       where: {
-    //         collectionId: req.params.collectionId,
+    if (req.params.collectionId) {
+      const collection =
+        await prisma.collection.findFirst({
+          where: {
+            collectionId: req.params.collectionId,
 
-    //         project: {
-    //           tenantId,
-    //           isActive: true,
-    //         },
-    //       },
+            project: {
+              tenantId,
+              isActive: true,
+            },
+          },
 
-    //       select: {
-    //         collectionId: true,
-    //         projectId: true,
+          select: {
+            collectionId: true,
+            projectId: true,
 
-    //         project: {
-    //           select: {
-    //             projectId: true,
-    //             isActive: true,
-    //           },
-    //         },
-    //       },
-    //     });
+            project: {
+              select: {
+                projectId: true,
+                isActive: true,
+              },
+            },
+          },
+        });
 
-    //   if (!collection) {
-    //     return res.status(404).json({
-    //       success: false,
-    //       message: "Collection not found",
-    //     });
-    //   }
+      if (!collection) {
+        return res.status(404).json({
+          success: false,
+          message: "Collection not found",
+        });
+      }
 
-    //   const access =
-    //     await prisma.userProjectAccess.findUnique({
-    //       where: {
-    //         userId_projectId: {
-    //           userId,
-    //           projectId: collection.projectId,
-    //         },
-    //       },
-    //     });
+      const access =
+        await prisma.userProjectAccess.findUnique({
+          where: {
+            userId_projectId: {
+              userId,
+              projectId: collection.projectId,
+            },
+          },
+        });
 
-    //   if (!access || !access.isActive) {
-    //     return res.status(403).json({
-    //       success: false,
-    //       message: "Access denied",
-    //     });
-    //   }
+      if (!access || !access.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
 
-    //   req.projectId = collection.projectId;
-    //   req.collectionId = collection.collectionId;
+      req.projectId = collection.projectId;
+      req.collectionId = collection.collectionId;
 
-    //   return next();
-    // }
+      return next();
+    }
 
-    // // ========================================================
-    // // RECORD REQUEST
-    // // ========================================================
+    // ========================================================
+    // RECORD REQUEST
+    // ========================================================
 
-    // if (req.params.recordId) {
-    //   const record =
-    //     await prisma.record.findFirst({
-    //       where: {
-    //         recordId: req.params.recordId,
+    if (req.params.recordId) {
+      const record =
+        await prisma.record.findFirst({
+          where: {
+            recordId: req.params.recordId,
 
-    //         collection: {
-    //           project: {
-    //             tenantId,
-    //             isActive: true,
-    //           },
-    //         },
-    //       },
+            collection: {
+              project: {
+                tenantId,
+                isActive: true,
+              },
+            },
+          },
 
-    //       select: {
-    //         recordId: true,
+          select: {
+            recordId: true,
 
-    //         collection: {
-    //           select: {
-    //             collectionId: true,
-    //             projectId: true,
-    //           },
-    //         },
-    //       },
-    //     });
+            collection: {
+              select: {
+                collectionId: true,
+                projectId: true,
+              },
+            },
+          },
+        });
 
-    //   if (!record) {
-    //     return res.status(404).json({
-    //       success: false,
-    //       message: "Record not found",
-    //     });
-    //   }
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          message: "Record not found",
+        });
+      }
 
-    //   const access =
-    //     await prisma.userProjectAccess.findUnique({
-    //       where: {
-    //         userId_projectId: {
-    //           userId,
-    //           projectId:
-    //             record.collection.projectId,
-    //         },
-    //       },
-    //     });
+      const access =
+        await prisma.userProjectAccess.findUnique({
+          where: {
+            userId_projectId: {
+              userId,
+              projectId:
+                record.collection.projectId,
+            },
+          },
+        });
 
-    //   if (!access || !access.isActive) {
-    //     return res.status(403).json({
-    //       success: false,
-    //       message:
-    //         "You do not have access to this record",
-    //     });
-    //   }
+      if (!access || !access.isActive) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You do not have access to this record",
+        });
+      }
 
-    //   req.projectId =
-    //     record.collection.projectId;
+      req.projectId =
+        record.collection.projectId;
 
-    //   req.collectionId =
-    //     record.collection.collectionId;
+      req.collectionId =
+        record.collection.collectionId;
 
-    //   return next();
-    // }
+      return next();
+    }
 
     // ========================================================
     // PROJECT REQUEST
@@ -200,121 +200,121 @@ const clientRecordAccess = async (req, res, next) => {
     // FORM REQUEST
     // ========================================================
 
-    // if (req.params.formId) {
-    //   const form =
-    //     await prisma.form.findFirst({
-    //       where: {
-    //         formId: req.params.formId,
+    if (req.params.formId) {
+      const form =
+        await prisma.form.findFirst({
+          where: {
+            formId: req.params.formId,
 
-    //         project: {
-    //           tenantId,
-    //           isActive: true,
-    //         },
-    //       },
+            project: {
+              tenantId,
+              isActive: true,
+            },
+          },
 
-    //       select: {
-    //         formId: true,
-    //         projectId: true,
-    //       },
-    //     });
+          select: {
+            formId: true,
+            projectId: true,
+          },
+        });
 
-    //   if (!form) {
-    //     return res.status(404).json({
-    //       success: false,
-    //       message: "Form not found",
-    //     });
-    //   }
+      if (!form) {
+        return res.status(404).json({
+          success: false,
+          message: "Form not found",
+        });
+      }
 
-    //   const access =
-    //     await prisma.userProjectAccess.findUnique({
-    //       where: {
-    //         userId_projectId: {
-    //           userId,
-    //           projectId: form.projectId,
-    //         },
-    //       },
-    //     });
+      const access =
+        await prisma.userProjectAccess.findUnique({
+          where: {
+            userId_projectId: {
+              userId,
+              projectId: form.projectId,
+            },
+          },
+        });
 
-    //   if (!access || !access.isActive) {
-    //     return res.status(403).json({
-    //       success: false,
-    //       message: "Access denied",
-    //     });
-    //   }
+      if (!access || !access.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
 
-    //   req.projectId = form.projectId;
-    //   req.formId = form.formId;
+      req.projectId = form.projectId;
+      req.formId = form.formId;
 
-    //   return next();
-    // }
+      return next();
+    }
 
     // ========================================================
     // FORM SUBMISSION REQUEST
     // ========================================================
 
-    // if (req.params.submissionId) {
-    //   const submission =
-    //     await prisma.formSubmission.findFirst({
-    //       where: {
-    //         submissionId:
-    //           req.params.submissionId,
+    if (req.params.submissionId) {
+      const submission =
+        await prisma.formSubmission.findFirst({
+          where: {
+            submissionId:
+              req.params.submissionId,
 
-    //         form: {
-    //           project: {
-    //             tenantId,
-    //             isActive: true,
-    //           },
-    //         },
-    //       },
+            form: {
+              project: {
+                tenantId,
+                isActive: true,
+              },
+            },
+          },
 
-    //       select: {
-    //         submissionId: true,
+          select: {
+            submissionId: true,
 
-    //         form: {
-    //           select: {
-    //             formId: true,
-    //             projectId: true,
-    //           },
-    //         },
-    //       },
-    //     });
+            form: {
+              select: {
+                formId: true,
+                projectId: true,
+              },
+            },
+          },
+        });
 
-    //   if (!submission) {
-    //     return res.status(404).json({
-    //       success: false,
-    //       message: "Form submission not found",
-    //     });
-    //   }
+      if (!submission) {
+        return res.status(404).json({
+          success: false,
+          message: "Form submission not found",
+        });
+      }
 
-    //   const access =
-    //     await prisma.userProjectAccess.findUnique({
-    //       where: {
-    //         userId_projectId: {
-    //           userId,
-    //           projectId:
-    //             submission.form.projectId,
-    //         },
-    //       },
-    //     });
+      const access =
+        await prisma.userProjectAccess.findUnique({
+          where: {
+            userId_projectId: {
+              userId,
+              projectId:
+                submission.form.projectId,
+            },
+          },
+        });
 
-    //   if (!access || !access.isActive) {
-    //     return res.status(403).json({
-    //       success: false,
-    //       message: "Access denied",
-    //     });
-    //   }
+      if (!access || !access.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
 
-    //   req.projectId =
-    //     submission.form.projectId;
+      req.projectId =
+        submission.form.projectId;
 
-    //   req.formId =
-    //     submission.form.formId;
+      req.formId =
+        submission.form.formId;
 
-    //   req.submissionId =
-    //     submission.submissionId;
+      req.submissionId =
+        submission.submissionId;
 
-    //   return next();
-    // }
+      return next();
+    }
 
     // ========================================================
     // NO VALID RESOURCE ID

@@ -13,6 +13,7 @@ const {
 
 const authMiddleware = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
+const clientRecordAccess = require("../middleware/clientRecordAccess.middleware")  
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.post(
   "/collections/:collectionId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   upload.any(),
   createRecord
 );
@@ -28,6 +30,7 @@ router.get(
   "/collections/:collectionId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   getRecords
 );
 
@@ -35,6 +38,7 @@ router.get(
   "/:recordId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   getRecord
 );
 
@@ -42,6 +46,7 @@ router.put(
   "/:recordId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   upload.any(),
   updateRecord
 );
@@ -50,6 +55,7 @@ router.delete(
   "/:recordId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   deleteRecord
 );
 

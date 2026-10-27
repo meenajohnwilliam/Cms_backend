@@ -5,6 +5,7 @@ const roleMiddleware = require("../middleware/role.middleware");
 const  clientRecordAccess = require("../middleware/clientRecordAccess.middleware")
 
 
+
 const {
   createOrder,
 //   getTenantOrders,
@@ -16,6 +17,6 @@ router.post("/", createOrder);
 
 // Get tenant orders with pagination
 // router.get("/", getTenantOrders);
-router.get("/:projectId", authMiddleware, roleMiddleware("ADMIN","SUPER_ADMIN","USER"), getOrders);
+router.get("/:projectId", authMiddleware, roleMiddleware("ADMIN","SUPER_ADMIN","USER"),clientRecordAccess, getOrders);
 
 module.exports = router;
