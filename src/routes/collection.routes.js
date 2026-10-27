@@ -19,6 +19,7 @@ const roleMiddleware =
   require("../middleware/role.middleware");
 
 const router = express.Router();
+const clientRecordAccess = require("../middleware/clientRecordAccess.middleware")  
 
 // ============================================================
 // CREATE
@@ -39,6 +40,7 @@ router.get(
   "/projects/:projectId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess
   getCollections
 );
 
