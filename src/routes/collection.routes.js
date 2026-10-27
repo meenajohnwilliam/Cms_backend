@@ -40,7 +40,7 @@ router.get(
   "/projects/:projectId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
-  clientRecordAccess
+  clientRecordAccess,
   getCollections
 );
 
@@ -52,6 +52,7 @@ router.get(
   "/:collectionId",
   authMiddleware,
   roleMiddleware("ADMIN","USER"),
+  clientRecordAccess,
   getCollection
 );
 
